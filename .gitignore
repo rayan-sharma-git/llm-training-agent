@@ -1,0 +1,27 @@
+# Virtual Environment
+venv310/
+
+# Node
+node_modules/
+
+# Build output
+dist/
+out/
+
+# Python cache
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Coverage
+.coverage
+
+# Environment variables
+.env
+
+# VS Code tests
+.vscode-test/
+
+# VS Code settings (optional)
+.vscode/
