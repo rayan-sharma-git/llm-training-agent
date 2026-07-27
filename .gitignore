@@ -23,5 +23,5 @@ __pycache__/
 # VS Code tests
 .vscode-test/
 
-# VS Code settings (optional)
+# VS Code settings
 .vscode/
