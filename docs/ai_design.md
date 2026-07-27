@@ -11,71 +11,71 @@ Status: Complete
 ## 1. System Architecture Overview
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                  Visual Studio Code                      │
-│                                                         │
-│  ┌───────────────────────────────────────────────────┐  │
-│  │              Product Agent Extension               │  │
-│  │                                                    │  │
-│  │  ┌──────────┐ ┌──────────┐ ┌──────────────────┐   │  │
-│  │  │ Sidebar   │ │ Chat     │ │ Report Viewer    │   │  │
-│  │  │ View      │ │ Panel    │ │                  │   │  │
-│  │  └─────┬────┘ └────┬─────┘ └────────┬─────────┘   │  │
-│  │        │           │                │              │  │
-│  │  ┌─────┴───────────┴────────────────┴──────────┐  │  │
-│  │  │           Extension Services                 │  │  │
-│  │  │  (API Client, State, Commands, Settings)     │  │  │
-│  │  └────────────────────┬───────────────────────┘  │  │
-│  └───────────────────────┼───────────────────────────┘  │
-│                          │                               │
-└──────────────────────────┼───────────────────────────────┘
-                           │
-                      HTTP/WS │
-                           │
-┌──────────────────────────┼───────────────────────────────┐
-│                  Python Backend (FastAPI)                 │
-│                                                          │
-│  ┌────────────────────────────────────────────────────┐  │
-│  │                 API Layer                           │  │
-│  │  /api/v1/*  (REST endpoints + WebSocket /ws/*)     │  │
-│  └────────────────────┬───────────────────────────────┘  │
-│                       │                                   │
-│  ┌────────────────────┴───────────────────────────────┐  │
-│  │              Core Services                          │  │
-│  │  ┌──────────┐ ┌──────────┐ ┌──────────────────┐   │  │
-│  │  │ Config    │ │ Logging  │ │ Error Handler    │   │  │
-│  │  └──────────┘ └──────────┘ └──────────────────┘   │  │
-│  └────────────────────┬───────────────────────────────┘  │
-│                       │                                   │
-│  ┌────────────────────┴───────────────────────────────┐  │
-│  │           Intelligence Pipeline                      │  │
-│  │                                                    │  │
-│  │  ProjectScanner  ──►  ContextBuilder               │  │
-│  │       │                                            │  │
-│  │       ▼                                            │  │
-│  │  ┌──────────────────────────────────────────┐      │  │
-│  │  │         Analyzer Pipeline                 │      │  │
-│  │  │  ┌──────────┐ ┌──────────┐ ┌────────┐   │      │  │
-│  │  │  │ Dataset   │ │ Prompt   │ │ Hyper-  │   │      │  │
-│  │  │  │ Analyzer  │ │ Analyzer │ │ param   │   │      │  │
-│  │  │  └──────────┘ └──────────┘ └────────┘   │      │  │
-│  │  │  ┌──────────┐ ┌──────────┐ ┌────────┐   │      │  │
-│  │  │  │ Model     │ │ Cost     │ │ Pred-   │   │      │  │
-│  │  │  │ Advisor   │ │ Est.     │ │ iction  │   │      │  │
-│  │  │  └──────────┘ └──────────┘ └────────┘   │      │  │
-│  │  └──────────────────────────────────────────┘      │  │
-│  │                                                    │  │
-│  │  RecommendationEngine  ──►  ReportGenerator        │  │
-│  └────────────────────┬───────────────────────────────┘  │
-│                       │                                   │
-│  ┌────────────────────┴───────────────────────────────┐  │
-│  │              Storage Layer                          │  │
-│  │  ┌──────────┐ ┌──────────┐ ┌──────────────────┐   │  │
-│  │  │ Repos     │ │ SQLite   │ │ Migrations       │   │  │
-│  │  │ (API)     │ │ (Impl)   │ │                  │   │  │
-│  │  └──────────┘ └──────────┘ └──────────────────┘   │  │
-│  └────────────────────────────────────────────────────┘  │
-└───────────────────────────────────────────────────────────┘
++---------------------------------------------------------+
+|                    Visual Studio Code                   |
+|                                                         |
+|  +---------------------------------------------------+  |
+|  |               Product Agent Extension               |  |
+|  |                                                    |  |
+|  |  +----------+ +----------+ +------------------+   |  |
+|  |  | Sidebar  | | Chat     | | Report Viewer    |   |  |
+|  |  | View     | | Panel    | |                  |   |  |
+|  |  +----+-----+ +----+-----+ +--------+---------+   |  |
+|  |       |           |                |              |  |
+|  |  +----+-----------+----------------+----------+   |  |
+|  |  |           Extension Services                 |   |  |
+|  |  |  (API Client, State, Commands, Settings)     |   |  |
+|  |  +--------------------+------------------------+   |  |
+|  +-----------------------|-----------------------------+  |
+|                            |                               |
++----------------------------|-------------------------------+
+                             |
+                        HTTP / WS
+                             |
++----------------------------|-------------------------------+
+|                  Python Backend (FastAPI)                  |
+|                                                          |
+|  +-----------------------------------------------------+  |
+|  |                 API Layer                           |  |
+|  |  /api/v1/*  (REST endpoints + WebSocket /ws/*)     |  |
+|  +--------------------+--------------------------------+  |
+|                       |                                    |
+|  +--------------------+--------------------------------+  |
+|  |              Core Services                          |  |
+|  |  +--------+ +--------+ +------------------------+   |  |
+|  |  | Config | | Logging| | Error Handler           |   |  |
+|  |  +--------+ +--------+ +------------------------+   |  |
+|  +--------------------+--------------------------------+  |
+|                       |                                    |
+|  +--------------------+--------------------------------+  |
+|  |           Intelligence Pipeline                      |  |
+|  |                                                     |  |
+|  |  ProjectScanner  --->  ContextBuilder               |  |
+|  |       |                                             |  |
+|  |       v                                             |  |
+|  |  +------------------------------------------------+  |  |
+|  |  |         Analyzer Pipeline                       |  |  |
+|  |  |  +----------+ +----------+ +---------+          |  |  |
+|  |  |  | Dataset   | | Prompt   | | Hyper-  |          |  |  |
+|  |  |  | Analyzer  | | Analyzer | | param   |          |  |  |
+|  |  |  +----------+ +----------+ +---------+          |  |  |
+|  |  |  +----------+ +----------+ +---------+          |  |  |
+|  |  |  | Model     | | Cost     | | Pred-   |          |  |  |
+|  |  |  | Advisor   | | Est.     | | iction  |          |  |  |
+|  |  |  +----------+ +----------+ +---------+          |  |  |
+|  |  +------------------------------------------------+  |  |
+|  |                                                     |  |
+|  |  RecommendationEngine  --->  ReportGenerator        |  |
+|  +--------------------+--------------------------------+  |
+|                       |                                    |
+|  +--------------------+--------------------------------+  |
+|  |              Storage Layer                          |  |
+|  |  +--------+ +--------+ +------------------------+   |  |
+|  |  | Repos   | | SQLite | | Migrations             |   |  |
+|  |  +--------+ +--------+ +------------------------+   |  |
+|  +-----------------------------------------------------+  |
++----------------------------------------------------------+
+
 ```
 
 ---
@@ -126,46 +126,46 @@ Status: Complete
 
 ```
 User clicks "Analyze Project"
-         │
-         ▼
+         |
+         v
 Extension sends POST /api/v1/project/analyze
-         │
-         ▼
+         |
+         v
 WebSocket connection opens /ws/analysis
-         │
-         ▼
+         |
+         v
 Backend starts Project Scanner
-         │
-         ▼
+         |
+         v
 Scanner produces ProjectContext
-         │
-         ▼
+         |
+         v
 ContextBuilder enriches context
-         │
-         ▼
+         |
+         v
 Parallel execution (where independent):
-  ├── DatasetAnalyzer ──► DatasetAnalysisResult
-  ├── PromptAnalyzer ──► PromptAnalysisResult
-  ├── HyperparameterAnalyzer ──► HyperparameterAnalysisResult
-  ├── ModelAdvisor ──► ModelAnalysisResult
-  └── CostEstimator ──► CostEstimate
-         │
-         ▼
+  +-- DatasetAnalyzer ------+ DatasetAnalysisResult
+  +-- PromptAnalyzer ------+ PromptAnalysisResult
+  +-- HyperparameterAnalyzer --+ HyperparameterAnalysisResult
+  +-- ModelAdvisor ---------+ ModelAnalysisResult
+  +-- CostEstimator --------+ CostEstimate
+         |
+         v
 PredictionEngine consumes analyzer results
-         │
-         ▼
+         |
+         v
 RecommendationEngine merges all results
-         │
-         ▼
+         |
+         v
 ReportGenerator produces EngineeringReport
-         │
-         ▼
+         |
+         v
 Results stored in SQLite via repositories
-         │
-         ▼
+         |
+         v
 WebSocket sends completion event
-         │
-         ▼
+         |
+         v
 Extension receives report and displays
 ```
 
@@ -173,27 +173,27 @@ Extension receives report and displays
 
 ```
 User sends message in Chat panel
-         │
-         ▼
+         |
+         v
 Extension sends POST /api/v1/chat/message
-         │
-         ▼
+         |
+         v
 ChatEngine loads:
   - ProjectContext
   - Latest EngineeringReport
   - Recommendations
   - Experiment History
-         │
-         ▼
+         |
+         v
 ChatEngine constructs prompt with context
-         │
-         ▼
+         |
+         v
 AIProvider generates response
-         │
-         ▼
+         |
+         v
 Response returned to extension
-         │
-         ▼
+         |
+         v
 Extension renders response
 ```
 
@@ -201,20 +201,20 @@ Extension renders response
 
 ```
 User clicks "Apply Recommendation"
-         │
-         ▼
+         |
+         v
 Extension calls POST /api/v1/files/propose
-         │
-         ▼
+         |
+         v
 Backend generates diff
-         │
-         ▼
+         |
+         v
 Extension displays diff (native VS Code diff viewer)
-         │
-         ▼
+         |
+         v
 User Approves / Rejects
-         │
-         ▼
+         |
+         v
 If Approved:
   POST /api/v1/files/apply
   Backend applies changes
@@ -250,14 +250,14 @@ If Approved:
 
 ## 6. Extensibility Strategy
 
-- **Analyzers**: Common `Analyzer` interface → new analyzers implement it → auto-registered
-- **AI Providers**: Common `AIProvider` interface → new providers implement it → configured via settings
-- **Frameworks**: Common `FrameworkDetector` interface → new detectors added
+- **Analyzers**: Common `Analyzer` interface -> new analyzers implement it -> auto-registered
+- **AI Providers**: Common `AIProvider` interface -> new providers implement it -> configured via settings
+- **Frameworks**: Common `FrameworkDetector` interface -> new detectors added
 - **Plugins**: Plugin registry with lifecycle management (future)
-- **Storage**: Repository interfaces → new implementations without business logic changes
+- **Storage**: Repository interfaces -> new implementations without business logic changes
 
 ---
 
 ## 7. Quality Score: 10/10
 
-Architecture is modular, loosely coupled, extensible. All major modules defined with clear responsibilities. Data flow documented. Failure modes addressed. Ready for detailed design.
+Architecture is modular, loosely coupled, and extensible. All major modules are defined with clear responsibilities. Data flow is documented. Failure modes are addressed. Ready for detailed design.

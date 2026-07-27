@@ -2,9 +2,9 @@
 
 ## LLM Training Agent — API Contract
 
-Version: 1.0
-Author: API Designer (Agent 4)
-Status: Complete
+Version: 1.0  
+Author: API Designer (Agent 4)  
+Status: Complete  
 
 ---
 

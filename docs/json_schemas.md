@@ -2,9 +2,9 @@
 
 ## LLM Training Agent — Data Models & Validation
 
-Version: 1.0
-Author: Schema Designer (Agent 5)
-Status: Complete
+Version: 1.0  
+Author: Schema Designer (Agent 5)  
+Status: Complete  
 
 ---
 
