@@ -1,46 +1,57 @@
-"""SQLAlchemy async database setup."""
+"""Database configuration and session management."""
 from __future__ import annotations
 
-from pathlib import Path
 from typing import AsyncGenerator
-
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import DeclarativeBase, sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy.orm import DeclarativeBase
 
 from core.config import get_settings
 
 
 class Base(DeclarativeBase):
-    """Base ORM class."""
-
+    """Base class for ORM models."""
     pass
 
 
-def get_engine():
-    """Create async SQLAlchemy engine."""
-    settings = get_settings()
-    db_path = Path(settings.database_url.replace("sqlite:///", ""))
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    engine = create_async_engine(
-        settings.database_url.replace("sqlite://", "sqlite+aiosqlite://"),
-        echo=settings.database_echo,
-    )
-    return engine
+class Database:
+    """Database connection manager."""
+    
+    def __init__(self, database_url: str):
+        self.engine = create_async_engine(database_url, echo=False)
+        self.session_factory = async_sessionmaker(
+            self.engine,
+            class_=AsyncSession,
+            expire_on_commit=False,
+        )
+    
+    async def create_tables(self) -> None:
+        """Create all tables."""
+        async with self.engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+    
+    async def dispose(self) -> None:
+        """Dispose engine."""
+        await self.engine.dispose()
 
 
-def get_session_factory(engine):
-    """Create async session factory."""
-    return sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+# Global database instance
+_db: Database | None = None
 
 
-async def get_session() -> AsyncGenerator:
-    """FastAPI dependency for database sessions."""
-    engine = get_engine()
-    factory = get_session_factory(engine)
-    async with factory() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
+def get_database() -> Database:
+    """Get database instance."""
+    global _db
+    if _db is None:
+        _db = Database(get_settings().database_url)
+    return _db
+
+
+def get_session_factory() -> async_sessionmaker:
+    """Get session factory."""
+    return get_database().session_factory
+
+
+async def get_session() -> AsyncGenerator[AsyncSession]:
+    """Get database session for FastAPI dependency injection."""
+    async with get_session_factory()() as session:
+        yield session

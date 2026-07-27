@@ -3,31 +3,48 @@ from __future__ import annotations
 
 import logging
 from typing import Any, Dict, List, Optional
-
-from models.schemas import ChatMessage, ProjectContext
-from ai.provider import AIProvider
-from core.errors import ProviderError
-
-logger = logging.getLogger(__name__)
+from models.schemas import ProjectContext, EngineeringReport, Recommendation
+from ai.providers import get_provider
+from core.config import get_settings
 
 
 class ChatEngine:
-    """Handles chat interactions with project context."""
-
-    def __init__(self, provider: AIProvider):
-        self.provider = provider
-
-    async def generate_response(self, session_id: str, message: str, context: ProjectContext, history: List[ChatMessage]) -> Dict[str, str]:
-        """Generate AI response with project context."""
+    """Manages conversational interactions about the project."""
+    
+    def __init__(self):
+        self.provider = get_provider(get_settings().default_provider)
+    
+    async def ask(self, context: ProjectContext, report: Optional[EngineeringReport], recommendations: List[Recommendation], question: str) -> Dict[str, Any]:
+        """Answer user question about the project."""
+        logging.info(f"Chat question: {question}")
+        
+        # Build context for the prompt
+        context_str = f"Project: {context.project_name}\nFramework: {context.detected_framework}\n"
+        
+        if report:
+            context_str += f"\nHealth Score: {report.project_health_score:.0%}\n"
+            context_str += f"Readiness Score: {report.training_readiness_score:.0%}\n"
+        
+        if recommendations:
+            context_str += f"\nTop Recommendations:\n"
+            for rec in recommendations[:3]:
+                context_str += f"- {rec.title}: {rec.description}\n"
+        
+        system_prompt = "You are an ML engineering assistant. Answer questions about the user's fine-tuning project based on the provided analysis context."
+        
+        prompt = f"{context_str}\n\nQuestion: {question}\n\nAnswer:"
+        
         try:
-            system_prompt = f"You are an ML engineering assistant analyzing project: {context.project_name}. Use the provided context to answer questions."
-            context_summary = f"Framework: {context.detected_framework}, Model: {context.base_model}, Datasets: {len(context.dataset_paths)}"
-            messages = [{"role": "system", "content": system_prompt + "\nContext: " + context_summary}]
-            for msg in history[-10:]:
-                messages.append({"role": msg.role, "content": msg.content})
-            messages.append({"role": "user", "content": message})
-            result = await self.provider.chat_completion(messages)
-            return {"response": result.get("content", ""), "model": result.get("model", "unknown")}
+            response = await self.provider.generate(prompt, system_prompt=system_prompt)
+            return {
+                "assistantResponse": response,
+                "references": ["project_context", "analysis_results"],
+                "confidence": "medium",
+            }
         except Exception as e:
-            logger.error(f"Chat response generation failed: {e}")
-            raise ProviderError(f"Chat failed: {e}", "unknown")
+            logging.error(f"Chat failed: {e}")
+            return {
+                "assistantResponse": f"Unable to generate response: {str(e)}",
+                "references": [],
+                "confidence": "low",
+            }

@@ -3,52 +3,117 @@ from __future__ import annotations
 
 import logging
 from typing import Any, Dict, List
-
-from models.schemas import EngineeringReport, Recommendation
-
-logger = logging.getLogger(__name__)
+from models.schemas import (
+    ProjectContext,
+    DatasetAnalysisResult,
+    PromptAnalysisResult,
+    HyperparameterAnalysisResult,
+    ModelAnalysisResult,
+    CostEstimate,
+    PredictionResult,
+    Recommendation,
+    EngineeringReport,
+)
 
 
 class ReportGenerator:
     """Generates comprehensive engineering reports."""
-
-    def generate(self, context, dataset_result, prompt_result, hp_result, model_result, cost_result, prediction_result, recommendations) -> Dict[str, Any]:
-        """Generate engineering report from analysis results."""
-        try:
-            health_score = self._compute_health_score(dataset_result, hp_result, model_result)
-            readiness_score = self._compute_readiness_score(dataset_result, hp_result, model_result, prediction_result)
-            rec_list = [Recommendation(**r) if isinstance(r, dict) else r for r in recommendations]
-            rec_list.sort(key=lambda r: {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}.get(r.severity, 2))
-            report = EngineeringReport(
-                executive_summary=f"Analysis of {context.project_name} completed with health score {health_score:.2f}",
-                project_health_score=health_score,
-                training_readiness_score=readiness_score,
-                dataset_summary={"quality_score": dataset_result.get("quality_score"), "findings": dataset_result.get("findings", [])},
-                prompt_summary={"clarity_score": prompt_result.get("clarity_score"), "issues": prompt_result.get("detected_issues", [])},
-                hyperparameter_summary={"learning_rate": hp_result.get("learning_rate"), "efficiency_score": hp_result.get("efficiency_score")},
-                model_summary={"model": model_result.get("selected_model"), "vram": model_result.get("estimated_vram")},
-                prediction_summary={"hallucination_risk": prediction_result.get("hallucination_risk")},
-                cost_summary={"gpu_hours": cost_result.get("estimated_gpu_hours"), "training_time": cost_result.get("estimated_training_time")},
-                prioritized_recommendations=rec_list,
-                action_plan=[r.title for r in rec_list[:5]],
-            )
-            return report.model_dump()
-        except Exception as e:
-            logger.error(f"Report generation failed: {e}")
-            raise
-
-    def _compute_health_score(self, dataset_result, hp_result, model_result) -> float:
-        score = 0.8
-        if dataset_result.get("quality_score", 0) < 0.8:
-            score -= 0.2
-        if hp_result.get("efficiency_score", 0) < 0.8:
-            score -= 0.15
-        if model_result.get("selected_model") == "unknown":
-            score -= 0.1
-        return max(0.0, min(1.0, score))
-
-    def _compute_readiness_score(self, dataset_result, hp_result, model_result, prediction_result) -> float:
-        score = self._compute_health_score(dataset_result, hp_result, model_result)
-        if prediction_result.get("hallucination_risk") == "high":
-            score -= 0.1
-        return max(0.0, min(1.0, score))
+    
+    def generate(self, context: ProjectContext, dataset_result: DatasetAnalysisResult, prompt_result: PromptAnalysisResult, hp_result: HyperparameterAnalysisResult, model_result: ModelAnalysisResult, cost_result: CostEstimate, prediction_result: PredictionResult, recommendations: List[Recommendation]) -> EngineeringReport:
+        """Generate engineering report from all analysis results."""
+        logging.info("Generating report")
+        
+        # Build summaries
+        dataset_summary = {
+            "quality_score": dataset_result.quality_score,
+            "sample_count": dataset_result.sample_count,
+            "confidence": dataset_result.confidence,
+        }
+        
+        prompt_summary = {
+            "clarity_score": prompt_result.clarity_score,
+            "complexity": prompt_result.prompt_complexity,
+            "confidence": prompt_result.confidence,
+        }
+        
+        hp_summary = {
+            "efficiency_score": hp_result.efficiency_score,
+            "overfitting_risk": hp_result.overfitting_risk,
+            "confidence": hp_result.confidence,
+        }
+        
+        model_summary = {
+            "selected_model": model_result.selected_model,
+            "context_length": model_result.context_length,
+            "confidence": model_result.confidence,
+        }
+        
+        prediction_summary = {
+            "instruction_following": prediction_result.instruction_following_prediction,
+            "hallucination_risk": prediction_result.hallucination_risk,
+            "confidence": prediction_result.confidence,
+        }
+        
+        cost_summary = {
+            "training_time": cost_result.estimated_training_time,
+            "gpu_hours": cost_result.estimated_gpu_hours,
+            "confidence": cost_result.confidence,
+        }
+        
+        # Compute scores
+        project_health_score = self._compute_health_score(dataset_result, hp_result, model_result)
+        training_readiness_score = self._compute_readiness_score(dataset_result, hp_result, model_result)
+        
+        # Executive summary
+        executive_summary = self._generate_executive_summary(
+            context, dataset_result, hp_result, model_result, recommendations
+        )
+        
+        # Action plan
+        action_plan = self._generate_action_plan(recommendations)
+        
+        return EngineeringReport(
+            executive_summary=executive_summary,
+            project_health_score=project_health_score,
+            training_readiness_score=training_readiness_score,
+            dataset_summary=dataset_summary,
+            prompt_summary=prompt_summary,
+            hyperparameter_summary=hp_summary,
+            model_summary=model_summary,
+            prediction_summary=prediction_summary,
+            cost_summary=cost_summary,
+            prioritized_recommendations=recommendations,
+            action_plan=action_plan,
+        )
+    
+    def _compute_health_score(self, dataset_result: DatasetAnalysisResult, hp_result: HyperparameterAnalysisResult, model_result: ModelAnalysisResult) -> float:
+        """Compute overall project health score."""
+        scores = [dataset_result.quality_score, hp_result.efficiency_score]
+        if model_result.confidence in ["high", "very_high"]:
+            scores.append(0.8)
+        return sum(scores) / len(scores)
+    
+    def _compute_readiness_score(self, dataset_result: DatasetAnalysisResult, hp_result: HyperparameterAnalysisResult, model_result: ModelAnalysisResult) -> float:
+        """Compute training readiness score."""
+        if dataset_result.quality_score > 0.8 and hp_result.efficiency_score > 0.7:
+            return 0.85
+        return 0.6
+    
+    def _generate_executive_summary(self, context: ProjectContext, dataset_result: DatasetAnalysisResult, hp_result: HyperparameterAnalysisResult, model_result: ModelAnalysisResult, recommendations: List[Recommendation]) -> str:
+        """Generate executive summary."""
+        return (
+            f"Project '{context.project_name}' analyzed successfully. "
+            f"Dataset quality: {dataset_result.quality_score:.0%}. "
+            f"Training configuration efficiency: {hp_result.efficiency_score:.0%}. "
+            f"{len(recommendations)} recommendations generated."
+        )
+    
+    def _generate_action_plan(self, recommendations: List[Recommendation]) -> List[str]:
+        """Generate prioritized action plan."""
+        if not recommendations:
+            return ["No critical actions required. Proceed with training."]
+        
+        plan = []
+        for i, rec in enumerate(recommendations[:5], 1):
+            plan.append(f"{i}. {rec.title}: {rec.description}")
+        return plan

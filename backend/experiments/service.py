@@ -2,48 +2,39 @@
 from __future__ import annotations
 
 import logging
+import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional
-
-from models.schemas import Experiment
-
-logger = logging.getLogger(__name__)
+from models.schemas import ProjectContext
+from storage.repositories import Repository, Experiment
+from storage.database import get_session
 
 
 class ExperimentService:
-    """Manages experiment tracking."""
-
-    def __init__(self, project_id: str):
-        self.project_id = project_id
-        self.experiments: List[Experiment] = []
-
-    async def create_experiment(self, experiment: Experiment) -> Experiment:
-        """Create a new experiment."""
-        experiment.tags = experiment.tags or []
-        experiment.artifacts = experiment.artifacts or []
-        self.experiments.append(experiment)
-        return experiment
-
-    async def list_experiments(self) -> List[Dict[str, Any]]:
-        """List all experiments for this project."""
-        return [exp.model_dump() for exp in self.experiments]
-
-    async def get_experiment(self, experiment_id: str) -> Optional[Dict[str, Any]]:
-        """Get a specific experiment."""
-        for exp in self.experiments:
-            if exp.experiment_id == experiment_id:
-                return exp.model_dump()
-        return None
-
-    async def delete_experiment(self, experiment_id: str) -> bool:
-        """Delete an experiment."""
-        self.experiments = [exp for exp in self.experiments if exp.experiment_id != experiment_id]
-        return True
-
-    async def compare_experiments(self, experiment_ids: List[str]) -> Dict[str, Any]:
-        """Compare multiple experiments."""
-        comparison = {"experiments": [], "best_metrics": {}, "differences": []}
-        for exp in self.experiments:
-            if exp.experiment_id in experiment_ids:
-                comparison["experiments"].append(exp.model_dump())
-        return comparison
+    """Tracks training experiments."""
+    
+    async def save_experiment(self, context: ProjectContext, metrics: Dict[str, Any], notes: Optional[str] = None) -> Dict[str, Any]:
+        """Save experiment record."""
+        logging.info("Saving experiment")
+        
+        experiment_id = str(uuid.uuid4())
+        async with get_session() as session:
+            repo = Repository(session, Experiment)
+            record = {
+                "id": experiment_id,
+                "project_name": context.project_name,
+                "dataset_version": context.dataset_paths[0] if context.dataset_paths else "unknown",
+                "model": context.base_model or "unknown",
+                "tokenizer": context.tokenizer or "unknown",
+                "hyperparameters": str(context.project_statistics),
+                "metrics": str(metrics),
+                "timestamp": datetime.utcnow(),
+                "notes": notes,
+            }
+            return await repo.create(record)
+    
+    async def list_experiments(self, project_name: str) -> List[Dict[str, Any]]:
+        """List experiments for a project."""
+        logging.info(f"Listing experiments for {project_name}")
+        # Stub implementation
+        return []

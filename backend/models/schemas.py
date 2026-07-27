@@ -1,70 +1,13 @@
-"""Pydantic schemas matching JSON schemas."""
+"""Pydantic schemas for all data models."""
 from __future__ import annotations
 
 from datetime import datetime
-from enum import Enum
 from typing import Any, Dict, List, Optional
-
 from pydantic import BaseModel, Field
 
 
-class Confidence(str, Enum):
-    VERY_HIGH = "very_high"
-    HIGH = "high"
-    MEDIUM = "medium"
-    LOW = "low"
-    VERY_LOW = "very_low"
-
-
-class Severity(str, Enum):
-    CRITICAL = "critical"
-    HIGH = "high"
-    MEDIUM = "medium"
-    LOW = "low"
-    INFO = "info"
-
-
-class Difficulty(str, Enum):
-    EASY = "easy"
-    MODERATE = "moderate"
-    HARD = "hard"
-
-
-class PromptComplexity(str, Enum):
-    SIMPLE = "simple"
-    MODERATE = "moderate"
-    COMPLEX = "complex"
-    VERY_COMPLEX = "very_complex"
-
-
-class Capability(str, Enum):
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-
-
-class PredictionQuality(str, Enum):
-    POOR = "poor"
-    FAIR = "fair"
-    GOOD = "good"
-    EXCELLENT = "excellent"
-
-
-class SpeedScore(str, Enum):
-    SLOW = "slow"
-    MEDIUM = "medium"
-    FAST = "fast"
-
-
-class Risk(str, Enum):
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-    VERY_HIGH = "very_high"
-
-
 class ProjectContext(BaseModel):
-    schema_version: str = "1.0"
+    """Structured project representation."""
     project_name: str
     project_path: str
     detected_framework: Optional[str] = None
@@ -85,7 +28,7 @@ class ProjectContext(BaseModel):
 
 
 class DatasetAnalysisResult(BaseModel):
-    schema_version: str = "1.0"
+    """Dataset analysis results."""
     dataset_name: str
     sample_count: int
     token_count: int
@@ -102,13 +45,13 @@ class DatasetAnalysisResult(BaseModel):
     findings: List[str] = []
     warnings: List[str] = []
     recommendations: List[str] = []
-    confidence: Confidence = Confidence.MEDIUM
+    confidence: str = "medium"
 
 
 class PromptAnalysisResult(BaseModel):
-    schema_version: str = "1.0"
+    """Prompt analysis results."""
     template_name: str
-    prompt_complexity: PromptComplexity = PromptComplexity.MODERATE
+    prompt_complexity: str = "moderate"
     ambiguity_score: float
     clarity_score: float
     formatting_score: float
@@ -116,11 +59,11 @@ class PromptAnalysisResult(BaseModel):
     consistency_score: float
     detected_issues: List[str] = []
     recommendations: List[str] = []
-    confidence: Confidence = Confidence.MEDIUM
+    confidence: str = "medium"
 
 
 class HyperparameterAnalysisResult(BaseModel):
-    schema_version: str = "1.0"
+    """Hyperparameter analysis results."""
     learning_rate: Optional[float] = None
     batch_size: Optional[int] = None
     epochs: Optional[int] = None
@@ -133,47 +76,47 @@ class HyperparameterAnalysisResult(BaseModel):
     lora_rank: Optional[int] = None
     lora_alpha: Optional[int] = None
     lora_dropout: Optional[float] = None
-    overfitting_risk: Risk = Risk.LOW
-    underfitting_risk: Risk = Risk.LOW
+    overfitting_risk: str = "medium"
+    underfitting_risk: str = "medium"
     efficiency_score: float
     recommendations: List[str] = []
-    confidence: Confidence = Confidence.MEDIUM
+    confidence: str = "medium"
 
 
 class ModelAnalysisResult(BaseModel):
-    schema_version: str = "1.0"
+    """Model analysis results."""
     selected_model: str
     parameter_count: str
     context_length: int
     estimated_vram: str
-    reasoning_capability: Capability = Capability.MEDIUM
-    coding_capability: Capability = Capability.MEDIUM
-    multilingual_capability: Capability = Capability.MEDIUM
-    instruction_following_capability: Capability = Capability.MEDIUM
-    speed_score: SpeedScore = SpeedScore.MEDIUM
-    memory_efficiency: Capability = Capability.MEDIUM
+    reasoning_capability: str = "medium"
+    coding_capability: str = "medium"
+    multilingual_capability: str = "medium"
+    instruction_following_capability: str = "medium"
+    speed_score: str = "medium"
+    memory_efficiency: str = "medium"
     strengths: List[str] = []
     weaknesses: List[str] = []
     recommended_alternatives: List[str] = []
-    confidence: Confidence = Confidence.MEDIUM
+    confidence: str = "medium"
 
 
 class PredictionResult(BaseModel):
-    schema_version: str = "1.0"
-    instruction_following_prediction: PredictionQuality = PredictionQuality.FAIR
-    hallucination_risk: Risk = Risk.MEDIUM
-    reasoning_prediction: PredictionQuality = PredictionQuality.FAIR
-    response_consistency_prediction: PredictionQuality = PredictionQuality.FAIR
-    creativity_prediction: Capability = Capability.MEDIUM
-    formatting_prediction: PredictionQuality = PredictionQuality.FAIR
+    """Training outcome predictions."""
+    instruction_following_prediction: str = "fair"
+    hallucination_risk: str = "medium"
+    reasoning_prediction: str = "fair"
+    response_consistency_prediction: str = "fair"
+    creativity_prediction: str = "medium"
+    formatting_prediction: str = "fair"
     likely_failure_modes: List[str] = []
     expected_strengths: List[str] = []
     expected_weaknesses: List[str] = []
-    confidence: Confidence = Confidence.MEDIUM
+    confidence: str = "medium"
 
 
 class CostEstimate(BaseModel):
-    schema_version: str = "1.0"
+    """Training cost estimates."""
     estimated_training_time: str
     estimated_gpu_hours: float
     estimated_vram_usage: str
@@ -181,29 +124,29 @@ class CostEstimate(BaseModel):
     estimated_storage_requirement: str
     compatible_hardware: List[str] = []
     assumptions: List[str] = []
-    confidence: Confidence = Confidence.MEDIUM
+    confidence: str = "medium"
 
 
 class Recommendation(BaseModel):
-    schema_version: str = "1.0"
-    recommendation_id: str = Field(default_factory=lambda: "rec-00000000-0000-0000-0000-000000000000")
+    """Single recommendation."""
+    recommendation_id: str
     category: str
     title: str
     description: str
     reasoning: str
     evidence: str
-    severity: Severity = Severity.MEDIUM
-    confidence: Confidence = Confidence.MEDIUM
-    estimated_benefit: str
-    implementation_difficulty: Difficulty = Difficulty.MODERATE
-    estimated_engineering_time: str
+    severity: str = "medium"
+    confidence: str = "medium"
+    estimated_benefit: str = ""
+    implementation_difficulty: str = "moderate"
+    estimated_engineering_time: str = ""
     affected_files: List[str] = []
     suggested_actions: List[str] = []
     references: List[str] = []
 
 
 class EngineeringReport(BaseModel):
-    schema_version: str = "1.0"
+    """Complete engineering report."""
     executive_summary: str
     project_health_score: float
     training_readiness_score: float
@@ -217,39 +160,8 @@ class EngineeringReport(BaseModel):
     action_plan: List[str] = []
 
 
-class ChatMessage(BaseModel):
-    schema_version: str = "1.0"
-    role: str
-    content: str
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
-
-
-class Experiment(BaseModel):
-    schema_version: str = "1.0"
-    base_model: str
-    dataset_version: str
-    tokenizer: Optional[str] = None
-    hyperparameters: Dict[str, Any] = {}
-    metrics: Dict[str, Any] = {}
-    notes: str = ""
-    tags: List[str] = []
-    artifacts: List[str] = []
-
-
-class FileModification(BaseModel):
-    schema_version: str = "1.0"
-    file_path: str
-    modification_type: str
-    original_content: Optional[str] = None
-    proposed_content: Optional[str] = None
-    diff: Optional[str] = None
-    approval_status: str = "pending"
-    applied_timestamp: Optional[datetime] = None
-    rollback_available: bool = False
-
-
 class ApiError(BaseModel):
-    schema_version: str = "1.0"
+    """API error response."""
     error_code: str
     message: str
     details: Optional[str] = None

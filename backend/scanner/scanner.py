@@ -1,100 +1,105 @@
-"""Project scanner for detecting fine-tuning project components."""
+"""Project scanner for discovering fine-tuning project structure."""
 from __future__ import annotations
 
-import os
+import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from scanner.framework_detector import FrameworkDetector
+from .framework_detector import FrameworkDetector
+
+logger = logging.getLogger(__name__)
 
 
 class ProjectScanner:
-    """Scans project directory to detect framework, datasets, configs, models."""
-
+    """Scan a project directory to discover fine-tuning related files and configuration."""
+    
     def __init__(self, project_path: str):
+        if not Path(project_path).exists():
+            raise FileNotFoundError(f"Project path does not exist: {project_path}")
         self.project_path = Path(project_path)
         self.framework_detector = FrameworkDetector()
-
+    
     def scan(self) -> Dict[str, Any]:
-        """Perform full project scan."""
-        if not self.project_path.exists():
-            raise FileNotFoundError(f"Project path not found: {self.project_path}")
-        framework_info = self.framework_detector.detect(self.project_path)
-        return {
+        """Scan the project and return structured summary."""
+        logger.info(f"Scanning project: {self.project_path}")
+        
+        # Detect framework
+        framework = self.framework_detector.detect(self.project_path)
+        
+        # Discover files
+        datasets = self._discover_datasets()
+        prompts = self._discover_prompts()
+        configs = self._discover_configs()
+        training_scripts = self._discover_scripts(["train*.py", "finetune*.py", "run_*.py"])
+        eval_scripts = self._discover_scripts(["eval*.py", "evaluate*.py", "test*.py"])
+        inference_scripts = self._discover_scripts(["inference*.py", "predict*.py", "serve*.py"])
+        
+        # Detect model
+        base_model = self._detect_model()
+        
+        result = {
             "project_name": self.project_path.name,
             "project_path": str(self.project_path),
-            "detected_framework": framework_info.get("framework"),
-            "framework_version": framework_info.get("version"),
-            "base_model": self._detect_base_model(),
-            "tokenizer": self._detect_tokenizer(),
-            "dataset_paths": self._discover_datasets(),
-            "prompt_templates": self._discover_prompts(),
-            "configuration_files": self._discover_configs(),
-            "training_scripts": self._discover_scripts("train"),
-            "evaluation_scripts": self._discover_scripts("eval"),
-            "inference_scripts": self._discover_scripts("infer"),
+            **framework,
+            "base_model": base_model,
+            "dataset_paths": datasets,
+            "prompt_templates": prompts,
+            "configuration_files": configs,
+            "training_scripts": training_scripts,
+            "evaluation_scripts": eval_scripts,
+            "inference_scripts": inference_scripts,
             "hardware_information": self._detect_hardware(),
             "project_statistics": self._compute_statistics(),
         }
-
-    def _detect_base_model(self) -> Optional[str]:
-        """Detect base model from config files."""
-        for pattern in ["**/config.json", "**/training_args.json", "**/*.yaml", "**/*.yml"]:
-            for path in self.project_path.glob(pattern):
-                try:
-                    content = path.read_text()
-                    if "base_model" in content or "model_name" in content:
-                        return "detected-from-config"
-                except Exception:
-                    pass
-        return None
-
-    def _detect_tokenizer(self) -> Optional[str]:
-        """Detect tokenizer from config files."""
-        for pattern in ["**/tokenizer_config.json", "**/tokenizer.json"]:
-            for path in self.project_path.glob(pattern):
-                if path.exists():
-                    return path.parent.name
-        return None
-
+        
+        logger.info("Project scan complete")
+        return result
+    
     def _discover_datasets(self) -> List[str]:
         """Discover dataset files."""
-        patterns = ["**/*.json", "**/*.jsonl", "**/*.csv", "**/*.parquet"]
-        datasets = []
+        patterns = ["*.json", "*.jsonl", "*.csv", "*.parquet", "*.txt", "*.tsv"]
+        files = []
         for pattern in patterns:
-            datasets.extend(str(p.relative_to(self.project_path)) for p in self.project_path.glob(pattern) if p.is_file())
-        return datasets[:50]
-
+            files.extend(self.project_path.rglob(pattern))
+        return [str(f.relative_to(self.project_path)) for f in files if f.is_file()]
+    
     def _discover_prompts(self) -> List[str]:
-        """Discover prompt template files."""
-        patterns = ["**/prompt*.txt", "**/prompt*.md", "**/template*.txt", "**/template*.md"]
-        prompts = []
+        """Discover prompt templates."""
+        patterns = ["prompt*.txt", "prompt*.md", "templates/**/*.txt", "templates/**/*.md"]
+        files = []
         for pattern in patterns:
-            prompts.extend(str(p.relative_to(self.project_path)) for p in self.project_path.glob(pattern) if p.is_file())
-        return prompts[:20]
-
+            files.extend(self.project_path.rglob(pattern))
+        return [str(f.relative_to(self.project_path)) for f in files if f.is_file()]
+    
     def _discover_configs(self) -> List[str]:
         """Discover configuration files."""
-        patterns = ["**/*.yaml", "**/*.yml", "**/*.toml", "**/*.json"]
-        configs = []
+        patterns = ["*.yaml", "*.yml", "*.toml", "*.json", "config*.py"]
+        files = []
         for pattern in patterns:
-            configs.extend(str(p.relative_to(self.project_path)) for p in self.project_path.glob(pattern) if p.is_file())
-        return configs[:30]
-
-    def _discover_scripts(self, keyword: str) -> List[str]:
-        """Discover training/evaluation/inference scripts."""
-        scripts = []
-        for p in self.project_path.rglob("*.py"):
-            if keyword in p.name.lower():
-                scripts.append(str(p.relative_to(self.project_path)))
-        return scripts[:20]
-
+            files.extend(self.project_path.rglob(pattern))
+        return [str(f.relative_to(self.project_path)) for f in files if f.is_file()]
+    
+    def _discover_scripts(self, patterns: List[str]) -> List[str]:
+        """Discover scripts matching patterns."""
+        files = []
+        for pattern in patterns:
+            files.extend(self.project_path.rglob(f"**/{pattern}"))
+        return [str(f.relative_to(self.project_path)) for f in files if f.is_file()]
+    
+    def _detect_model(self) -> Optional[str]:
+        """Attempt to detect the base model."""
+        # Simple heuristic: look for model references in configs
+        for config in self.project_path.rglob("*.yaml"):
+            text = config.read_text(errors="ignore")
+            if "model_name_or_path" in text:
+                return "detected_in_config"
+        return None
+    
     def _detect_hardware(self) -> Dict[str, Any]:
-        """Detect available hardware information."""
-        return {"gpu_available": False, "cpu_count": os.cpu_count()}
-
+        """Detect available hardware."""
+        return {"gpu_available": False, "cpu_count": 4}
+    
     def _compute_statistics(self) -> Dict[str, Any]:
-        """Compute basic project statistics."""
+        """Compute project statistics."""
         file_count = sum(1 for _ in self.project_path.rglob("*") if _.is_file())
-        total_size = sum(f.stat().st_size for f in self.project_path.rglob("*") if f.is_file())
-        return {"file_count": file_count, "total_size_bytes": total_size}
+        return {"file_count": file_count}
