@@ -1,0 +1,47 @@
+{
+  "name": "llm-training-agent",
+  "displayName": "LLM Training Agent",
+  "version": "1.0.0",
+  "description": "AI-powered engineering assistant for LLM fine-tuning",
+  "main": "./out/extension.js",
+  "activationEvents": ["onStartupFinished"],
+  "contributes": {
+    "commands": [
+      {"command": "llmTrainingAgent.analyzeProject", "title": "Analyze Project"},
+      {"command": "llmTrainingAgent.analyzeDataset", "title": "Analyze Dataset"},
+      {"command": "llmTrainingAgent.openChat", "title": "Open Chat"},
+      {"command": "llmTrainingAgent.viewReport", "title": "View Report"}
+    ],
+    "views": {
+      "llm-training-agent": [
+        {"id": "overview", "name": "Overview"},
+        {"id": "chat", "name": "Chat"},
+        {"id": "report", "name": "Report"}
+      ]
+    },
+    "configuration": {
+      "title": "LLM Training Agent",
+      "properties": {
+        "llmTrainingAgent.backendUrl": {"type": "string", "default": "http://127.0.0.1:8000"},
+        "llmTrainingAgent.provider": {"type": "string", "enum": ["ollama", "openai", "anthropic"], "default": "ollama"},
+        "llmTrainingAgent.model": {"type": "string", "default": "llama3.2"}
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "vscode-languageclient": "^9.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/test-electron": "^2.3.0",
+    "typescript": "^5.3.0",
+    "vitest": "^1.0.0"
+  }
+}
