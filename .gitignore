@@ -162,10 +162,20 @@ tests/fixtures/datasets/high_quality/*.jsonl
 tests/fixtures/datasets/low_quality/*.jsonl
 tests/fixtures/datasets/edge_cases/*.jsonl
 
+# Project-specific
+steps.txt
+
 # Extension build artifacts
 extension/*.vsix
 extension/out/
 extension/dist/
+PROJECT_TEMPLATE/extension/*.vsix
+PROJECT_TEMPLATE/extension/out/
+PROJECT_TEMPLATE/extension/dist/
+
+# VS Code test downloads (large files, should never be committed)
+PROJECT_TEMPLATE/extension/.vscode-test/
+PROJECT_TEMPLATE/extension/out_backup.zip
 
 # Backend build artifacts
 backend/*.pyc
