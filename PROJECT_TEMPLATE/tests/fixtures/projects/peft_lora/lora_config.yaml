@@ -1,0 +1,40 @@
+# PEFT LoRA Configuration
+
+model_name: TinyLlama/TinyLlama-1.1B-Chat-v1.0
+tokenizer_name: TinyLlama/TinyLlama-1.1B-Chat-v1.0
+
+dataset_path: ./dataset/sample.jsonl
+dataset_format: jsonl
+
+output_dir: ./lora-output
+max_seq_length: 2048
+
+# Training parameters
+epochs: 3
+batch_size: 4
+learning_rate: 2e-4
+weight_decay: 0.01
+warmup_steps: 50
+
+# Logging
+logging_steps: 10
+save_steps: 500
+
+# Optimization
+fp16: true
+bf16: false
+gradient_checkpointing: true
+gradient_accumulation_steps: 2
+
+# LoRA Configuration
+lora_r: 8
+lora_alpha: 16
+lora_dropout: 0.05
+lora_target_modules:
+  - q_proj
+  - v_proj
+  - k_proj
+  - o_proj
+
+# Reproducibility
+seed: 42

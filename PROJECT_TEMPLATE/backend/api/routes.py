@@ -194,12 +194,30 @@ async def refresh_recommendations():
 
 @router.get("/report")
 async def get_report():
-    return {"report": None}
+    # In a full implementation this would retrieve the latest stored report.
+    # For production readiness, return a clear no-data response.
+    return JSONResponse(status_code=status.HTTP_404_NOT_FOUND, content={"detail": "No report available"})
 
 
 @router.post("/chat/message")
 async def chat_message(request: Dict[str, Any]):
-    return {"assistantResponse": "Chat not yet connected to AI provider", "references": [], "confidence": "low"}
+    try:
+        message = request.get("message")
+        if not message:
+            raise HTTPException(status_code=400, detail="message is required")
+        # TODO: integrate with configured AI provider via chat service.
+        if not message.strip():
+            raise HTTPException(status_code=422, detail="message must not be empty")
+        return {
+            "assistantResponse": "Backend received the message but AI integration is pending.",
+            "references": [],
+            "confidence": "low",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Chat failed: {e}")
+        raise HTTPException(status_code=500, detail={"errorCode": "CHAT_FAILED", "message": str(e)})
 
 
 @router.get("/chat/history")

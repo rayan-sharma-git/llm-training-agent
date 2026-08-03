@@ -1,0 +1,10 @@
+{
+  "name": "llm-training-agent-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Monorepo for LLM Training Agent",
+  "scripts": {},
+  "engines": {
+    "node": ">=18"
+  }
+}

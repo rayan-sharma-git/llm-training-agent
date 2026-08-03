@@ -1,0 +1,19 @@
+{
+  "templateName": "effective_system_prompt",
+  "promptComplexity": "medium",
+  "ambiguityScore": 0.15,
+  "clarityScore": 0.92,
+  "formattingScore": 0.95,
+  "instructionQualityScore": 0.90,
+  "consistencyScore": 0.88,
+  "detectedIssues": [
+    "Placeholder {context} may be undefined in some use cases",
+    "Consider specifying expected response format"
+  ],
+  "recommendations": [
+    "Add explicit handling for missing context",
+    "Consider adding examples of good responses",
+    "Specify tone and style preferences"
+  ],
+  "confidence": "high"
+}

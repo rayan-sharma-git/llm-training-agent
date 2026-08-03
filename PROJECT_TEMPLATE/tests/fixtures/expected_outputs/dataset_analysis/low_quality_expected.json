@@ -1,0 +1,40 @@
+{
+  "datasetName": "low_quality_sample",
+  "sampleCount": 24,
+  "tokenCount": 3125,
+  "averagePromptLength": 28,
+  "averageResponseLength": 58,
+  "duplicatePercentage": 16.67,
+  "nearDuplicatePercentage": 12.5,
+  "missingFieldPercentage": 8.33,
+  "formattingConsistencyScore": 0.45,
+  "languageConsistencyScore": 0.88,
+  "instructionConsistencyScore": 0.62,
+  "responseConsistencyScore": 0.55,
+  "qualityScore": 0.38,
+  "findings": [
+    "Dataset contains 24 records with significant quality issues",
+    "4 exact duplicate pairs detected (16.67%)",
+    "3 near-duplicate pairs with similar phrasing (12.5%)",
+    "2 records with empty response fields (8.33%)",
+    "1 record with missing 'response' field",
+    "1 record with empty instruction field",
+    "Inconsistent response lengths: 8 very short (<20 tokens), 3 empty",
+    "Multiple records asking about overfitting with identical/similar responses"
+  ],
+  "warnings": [
+    "High duplicate rate will cause the model to overfit to repeated examples",
+    "Missing fields will cause training errors if not handled",
+    "Very short responses may not provide sufficient training signal"
+  ],
+  "recommendations": [
+    "Remove exact duplicates before training",
+    "Remove or rewrite near-duplicate records to increase diversity",
+    "Fix or remove records with empty/missing fields",
+    "Standardize response formatting (all responses should be complete sentences)",
+    "Increase average response length to at least 50 tokens for better learning",
+    "Add validation script to check data quality before training",
+    "Consider rebalancing topic distribution (overfitting topic is overrepresented)"
+  ],
+  "confidence": "high"
+}

@@ -1,0 +1,55 @@
+# Axolotl Training Configuration
+# Base model configuration
+base_model: mistral-7b-bnb-4bit
+
+# Model parameters
+model_type: AutoModelForCausalLM
+tokenizer_type: AutoTokenizer
+
+# Dataset configuration
+datasets:
+  - path: ../datasets/high_quality/sample.jsonl
+    type: sharegpt
+    conversation_field: conversations
+    roles:
+      system: system
+      user: human
+      assistant: gpt
+
+# Training configuration
+sequence_len: 2048
+max_steps: 1000
+eval_steps: 100
+save_steps: 200
+warmup_steps: 100
+
+# Optimizer configuration
+optimizer: adamw_8bit
+lr_scheduler: cosine
+learning_rate: 0.0002
+weight_decay: 0.01
+
+# Batch configuration
+micro_batch_size: 4
+gradient_accumulation_steps: 4
+batch_size: 16
+
+# LoRA configuration
+lora_r: 8
+lora_alpha: 16
+lora_dropout: 0.05
+lora_target_modules:
+  - q_proj
+  - v_proj
+  - k_proj
+  - o_proj
+
+# Training settings
+gradient_checkpointing: true
+bf16: true
+tf32: true
+flash_attention: true
+
+# Output configuration
+output_dir: ./output/lora-adapter
+logging_steps: 10

@@ -1,0 +1,14 @@
+You are a helpful assistant.
+
+Instructions:
+Answer the user's question to the best of your ability.
+Be concise.
+Be detailed.
+Avoid giving opinions.
+Provide multiple perspectives.
+
+Context: {context}
+Question: {question}
+Also answer: {unrelated_question}
+Additional context: {extra_context}
+Response:

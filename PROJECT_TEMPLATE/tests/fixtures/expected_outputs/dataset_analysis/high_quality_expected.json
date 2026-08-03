@@ -1,0 +1,27 @@
+{
+  "datasetName": "high_quality_sample",
+  "sampleCount": 12,
+  "tokenCount": 2847,
+  "averagePromptLength": 42,
+  "averageResponseLength": 187,
+  "duplicatePercentage": 0.0,
+  "nearDuplicatePercentage": 0.0,
+  "missingFieldPercentage": 0.0,
+  "formattingConsistencyScore": 1.0,
+  "languageConsistencyScore": 1.0,
+  "instructionConsistencyScore": 0.95,
+  "responseConsistencyScore": 0.92,
+  "qualityScore": 0.94,
+  "findings": [
+    "Dataset contains 12 well-formed instruction-response pairs",
+    "All records have both instruction and response fields",
+    "Consistent JSON formatting across all samples",
+    "Responses demonstrate good technical depth"
+  ],
+  "warnings": [],
+  "recommendations": [
+    "Consider adding response length validation to ensure consistency",
+    "Add diversity metrics to verify topic coverage"
+  ],
+  "confidence": "high"
+}

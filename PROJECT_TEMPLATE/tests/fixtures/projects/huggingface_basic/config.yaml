@@ -1,0 +1,31 @@
+# Hugging Face Basic Training Configuration
+
+model_name: TinyLlama/TinyLlama-1.1B-Chat-v1.0
+tokenizer_name: TinyLlama/TinyLlama-1.1B-Chat-v1.0
+
+dataset_path: ./dataset/sample.jsonl
+dataset_format: jsonl
+
+output_dir: ./results
+max_seq_length: 2048
+
+# Training parameters
+epochs: 3
+batch_size: 8
+learning_rate: 5e-5
+weight_decay: 0.01
+warmup_steps: 100
+
+# Logging and evaluation
+logging_steps: 10
+eval_steps: 100
+save_steps: 500
+
+# Optimization
+fp16: true
+bf16: false
+gradient_checkpointing: true
+gradient_accumulation_steps: 1
+
+# Reproducibility
+seed: 42

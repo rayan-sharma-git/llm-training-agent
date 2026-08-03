@@ -1,0 +1,32 @@
+{
+  "templateName": "problematic_system_prompt",
+  "promptComplexity": "high",
+  "ambiguityScore": 0.78,
+  "clarityScore": 0.32,
+  "formattingScore": 0.40,
+  "instructionQualityScore": 0.35,
+  "consistencyScore": 0.25,
+  "detectedIssues": [
+    "Conflicting instructions: 'Be concise' vs 'Be detailed'",
+    "Conflicting instructions: 'Avoid giving opinions' vs 'Provide multiple perspectives'",
+    "Multiple unrelated placeholders: {context}, {question}, {unrelated_question}, {extra_context}",
+    "Missing role definition",
+    "No clear task structure",
+    "Prompt leakage: system instructions mixed with user content",
+    "Inconsistent formatting and structure",
+    "Unclear what the assistant should prioritize when instructions conflict"
+  ],
+  "recommendations": [
+    "Resolve conflicting instructions: choose either concise OR detailed, not both",
+    "Resolve conflicting instructions: choose either avoid opinions OR provide perspectives",
+    "Remove unrelated placeholders that don't serve the main task",
+    "Add clear role definition at the start",
+    "Structure prompt with distinct sections: Role, Task, Guidelines, Format",
+    "Separate system instructions from user content to prevent leakage",
+    "Standardize formatting with consistent bullet points or numbering",
+    "Add priority ordering for instructions when multiple guidelines exist",
+    "Specify what to do when context is missing",
+    "Add examples demonstrating expected response format"
+  ],
+  "confidence": "high"
+}

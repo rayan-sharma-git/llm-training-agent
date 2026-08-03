@@ -136,6 +136,46 @@ temp/
 s -ExecutionPolicy RemoteSigned) ; (& dDocumentsLLM_Training_Agentvenv310ScriptsActivate.ps1)
 
 steps.txt
+
+# Test fixtures (downloaded datasets)
+tests/fixtures/datasets/high_quality/*.jsonl
+tests/fixtures/datasets/low_quality/*.jsonl
+tests/fixtures/datasets/edge_cases/*.jsonl
+
+# Extension build artifacts
+extension/*.vsix
+extension/out/
+extension/dist/
+
+# Backend build artifacts
+backend/*.pyc
+backend/__pycache__/
+backend/.pytest_cache/
+backend/.mypy_cache/
+
+# Generated files
+*.generated.md
+.DS_Store
+
+# Test fixtures (downloaded datasets - keep structure, ignore data)
+tests/fixtures/datasets/high_quality/*.jsonl
+tests/fixtures/datasets/low_quality/*.jsonl
+tests/fixtures/datasets/edge_cases/*.jsonl
+
+# Extension build artifacts
+extension/*.vsix
+extension/out/
+extension/dist/
+
+# Backend build artifacts
+backend/*.pyc
+backend/__pycache__/
+backend/.pytest_cache/
+backend/.mypy_cache/
+
+# Generated files
+*.generated.md
+
 # Tracked venv310 files (explicitly ignored)
 venv310/Lib/site-packages/_distutils_hack/__init__.py
 venv310/Lib/site-packages/_distutils_hack/__pycache__/__init__.cpython-310.pyc

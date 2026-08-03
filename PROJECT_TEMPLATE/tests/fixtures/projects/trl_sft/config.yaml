@@ -1,0 +1,30 @@
+# TRL SFT Training Configuration
+
+model_name: TinyLlama/TinyLlama-1.1B-Chat-v1.0
+tokenizer_name: TinyLlama/TinyLlama-1.1B-Chat-v1.0
+
+dataset_path: ./dataset/sample.jsonl
+dataset_format: jsonl
+
+output_dir: ./sft-output
+max_seq_length: 2048
+
+# Training parameters
+epochs: 3
+batch_size: 4
+gradient_accumulation_steps: 4
+learning_rate: 2e-4
+warmup_steps: 100
+
+# Logging
+logging_steps: 10
+save_steps: 500
+
+# Optimization
+fp16: true
+bf16: false
+gradient_checkpointing: true
+packing: false
+
+# Reproducibility
+seed: 42

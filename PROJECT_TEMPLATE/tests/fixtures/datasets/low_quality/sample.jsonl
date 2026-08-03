@@ -1,0 +1,25 @@
+{"instruction": "Explain overfitting", "response": "Overfitting is when the model memorizes the training data and performs poorly on test data. It learns the noise in the training data instead of the underlying pattern."}
+{"instruction": "What is overfitting?", "response": "When a model is too complex and fits the training data too closely, leading to poor generalization."}
+{"instruction": "Define overfitting", "response": "Overfitting is bad. Don't do it."}
+{"instruction": "Explain overfitting in detail with examples and prevention techniques.", "response": ""}
+{"instruction": "What is overfitting?", "response": "When a model is too complex and fits the training data too closely, leading to poor generalization."}
+{"instruction": "Explain overfitting", "response": "Overfitting is when the model memorizes the training data and performs poorly on test data. It learns the noise in the training data instead of the underlying pattern."}
+{"instruction": "Describe overfitting", "incomplete": "This response field is missing"}
+{"instruction": "What is overfitting?"}
+{"instruction": "", "response": "This instruction is empty."}
+{"instruction": "Explain overfitting in machine learning.", "response": "Overfitting occurs when a model learns the training data too well, including noise and random fluctuations."}
+{"instruction": "What is supervised learning?", "response": "Supervised learning uses labeled data."}
+{"instruction": "Explain overfitting", "response": "Overfitting is when the model memorizes the training data."}
+{"instruction": "What is overfitting?", "response": "When a model is too complex and fits the training data too closely, leading to poor generalization."}
+{"instruction": "Define overfitting", "response": "Overfitting is bad. Don't do it."}
+{"instruction": "Explain overfitting in detail with examples and prevention techniques.", "response": ""}
+{"instruction": "What is overfitting?", "response": "When a model is too complex and fits the training data too closely, leading to poor generalization."}
+{"instruction": "Describe gradient descent", "response": "Gradient descent is an optimization algorithm."}
+{"instruction": "What is gradient descent?", "response": "It minimizes the loss function."}
+{"instruction": "Explain gradient descent", "response": "Gradient descent is an optimization algorithm."}
+{"instruction": "What is gradient descent?", "response": "It minimizes the loss function."}
+{"instruction": "Explain gradient descent in detail with mathematical notation, variants, and practical tips for choosing learning rates.", "response": ""}
+{"instruction": "What is a neural network?", "response": "A neural network is a model inspired by the human brain."}
+{"instruction": "Explain neural networks", "response": "Neural networks consist of layers of neurons."}
+{"instruction": "What is a neural network?", "response": "A neural network is a model inspired by the human brain."}
+{"instruction": "Explain neural networks", "response": "Neural networks consist of layers of neurons."}
