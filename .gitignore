@@ -172,6 +172,7 @@ extension/dist/
 PROJECT_TEMPLATE/extension/*.vsix
 PROJECT_TEMPLATE/extension/out/
 PROJECT_TEMPLATE/extension/dist/
+/*.vsix
 
 # VS Code test downloads (large files, should never be committed)
 PROJECT_TEMPLATE/extension/.vscode-test/

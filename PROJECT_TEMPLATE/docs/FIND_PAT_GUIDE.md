@@ -136,4 +136,4 @@ vsce publish
 6. Expiration: 1 year
 7. Click "Create"
 8. Copy the token (shown only once)
-9. Use it with `vsce publish --pat TOKEN`
+9. Use it with `vsce publish --pat TOKEN` 
