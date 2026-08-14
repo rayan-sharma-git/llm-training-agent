@@ -1,31 +1,25 @@
 import * as vscode from 'vscode';
-import { ApiClient, ChatResponse } from '../services/apiClient';
+import { ApiClient } from '../services/apiClient';
 import { SettingsManager } from '../services/settings';
+import { CHAT_VIEW_ID } from '../views/viewIds';
 
-export function registerChatCommands(context: vscode.ExtensionContext, apiClient: ApiClient, settings: SettingsManager) {
+/**
+ * Registers the chat-related commands.
+ * - llmTrainingAgent.openChat  : opens the Chat sidebar view.
+ */
+export function registerChatCommands(
+  context: vscode.ExtensionContext,
+  _apiClient: ApiClient,
+  _settings: SettingsManager,
+  _startupPromise?: Promise<boolean>
+): void {
   const openChatCommand = vscode.commands.registerCommand('llmTrainingAgent.openChat', async () => {
-    const message = await vscode.window.showInputBox({
-      prompt: 'Ask about your fine-tuning project',
-      placeHolder: 'Why is my learning rate too high?',
-    });
-    
-    if (!message) {
-      return;
-    }
-    
-    try {
-      const response: ChatResponse = await apiClient.sendChatMessage(message);
-      const confidence = response.confidence === 'high' ? '💚' : response.confidence === 'medium' ? '💛' : '❤️';
-      const infoMessage = `${confidence} ${response.assistantResponse}`;
-      vscode.window.showInformationMessage(infoMessage, 'Show Details').then(selection => {
-        if (selection === 'Show Details') {
-          vscode.window.showInformationMessage(JSON.stringify(response.references, null, 2));
-        }
-      });
-    } catch (error) {
-      vscode.window.showErrorMessage(`Chat failed: ${error}`);
-    }
+    // Reveal the chat view.
+    await vscode.commands.executeCommand(`${CHAT_VIEW_ID}.focus`);
+    // Fallback: reveal the container so the sidebar appears even if the
+    // view command is not available yet.
+    await vscode.commands.executeCommand('workbench.view.extension.llm-training-agent');
   });
-  
+
   context.subscriptions.push(openChatCommand);
 }

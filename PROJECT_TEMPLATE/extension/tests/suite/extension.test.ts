@@ -46,7 +46,7 @@ suite('LLM Training Agent Extension Tests', () => {
 
   test('Overview view should be registered', async () => {
     try {
-      await vscode.commands.executeCommand('vscode.openView', 'overview');
+      await vscode.commands.executeCommand('vscode.openView', 'llmTrainingAgent.overview');
       assert.ok(true, 'Overview view opened successfully');
     } catch (e) {
       assert.fail('Overview view could not be opened: ' + (e as Error).message);
@@ -55,19 +55,19 @@ suite('LLM Training Agent Extension Tests', () => {
 
   test('Chat view should be registered', async () => {
     try {
-      await vscode.commands.executeCommand('vscode.openView', 'chat');
+      await vscode.commands.executeCommand('vscode.openView', 'llmTrainingAgent.chat');
       assert.ok(true, 'Chat view opened successfully');
     } catch (e) {
       assert.fail('Chat view could not be opened: ' + (e as Error).message);
     }
   });
 
-  test('Report view should be registered', async () => {
+  test('Reports view should be registered', async () => {
     try {
-      await vscode.commands.executeCommand('vscode.openView', 'report');
-      assert.ok(true, 'Report view opened successfully');
+      await vscode.commands.executeCommand('vscode.openView', 'llmTrainingAgent.reports');
+      assert.ok(true, 'Reports view opened successfully');
     } catch (e) {
-      assert.fail('Report view could not be opened: ' + (e as Error).message);
+      assert.fail('Reports view could not be opened: ' + (e as Error).message);
     }
   });
 

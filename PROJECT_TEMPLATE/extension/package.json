@@ -16,52 +16,121 @@
   "categories": ["Machine Learning", "Data Science"],
   "main": "./out/extension.js",
   "activationEvents": [
-    "onStartupFinished"
+    "onStartupFinished",
+    "onView:llmTrainingAgent.overview",
+    "onView:llmTrainingAgent.chat",
+    "onView:llmTrainingAgent.reports",
+    "onView:llmTrainingAgent.settings",
+    "onCommand:llmTrainingAgent.analyzeProject",
+    "onCommand:llmTrainingAgent.analyzeDataset",
+    "onCommand:llmTrainingAgent.openChat",
+    "onCommand:llmTrainingAgent.viewReport",
+    "onCommand:llmTrainingAgent.configureProvider"
   ],
   "engines": {
-    "vscode": ">=1.85.0"
+    "vscode": "^1.85.0"
   },
   "contributes": {
-    "commands": [
-      {
-        "command": "llmTrainingAgent.analyzeProject",
-        "title": "Analyze Project"
-      },
-      {
-        "command": "llmTrainingAgent.analyzeDataset",
-        "title": "Analyze Dataset"
-      },
-      {
-        "command": "llmTrainingAgent.openChat",
-        "title": "Open Chat"
-      },
-      {
-        "command": "llmTrainingAgent.viewReport",
-        "title": "View Report"
-      }
-    ],
     "viewsContainers": {
-      "activitybar": {
-        "llm-training-agent": {
+      "activitybar": [
+        {
           "id": "llm-training-agent",
           "title": "LLM Training Agent",
           "icon": "resources/icon.svg"
         }
-      }
+      ]
     },
     "views": {
       "llm-training-agent": [
         {
-          "id": "overview",
-          "name": "Overview"
+          "id": "llmTrainingAgent.overview",
+          "name": "Overview",
+          "type": "tree"
         },
         {
-          "id": "chat",
-          "name": "Chat"
+          "id": "llmTrainingAgent.chat",
+          "name": "Chat",
+          "type": "webview"
         },
         {
-          "id": "report",
-          "name": "Report"
+          "id": "llmTrainingAgent.reports",
+          "name": "Reports",
+          "type": "tree"
+        },
+        {
+          "id": "llmTrainingAgent.settings",
+          "name": "Settings",
+          "type": "webview"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "llmTrainingAgent.analyzeProject",
+        "title": "Analyze Project",
+        "category": "LLM Training Agent",
+        "icon": "$(rocket)"
+      },
+      {
+        "command": "llmTrainingAgent.analyzeDataset",
+        "title": "Analyze Dataset",
+        "category": "LLM Training Agent",
+        "icon": "$(database)"
+      },
+      {
+        "command": "llmTrainingAgent.openChat",
+        "title": "Open Chat",
+        "category": "LLM Training Agent",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "llmTrainingAgent.viewReport",
+        "title": "View Report",
+        "category": "LLM Training Agent",
+        "icon": "$(file-text)"
+      },
+      {
+        "command": "llmTrainingAgent.configureProvider",
+        "title": "Configure AI Provider",
+        "category": "LLM Training Agent",
+        "icon": "$(gear)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "llmTrainingAgent.analyzeProject",
+          "when": "view == llmTrainingAgent.overview",
+          "group": "navigation"
+        },
+        {
+          "command": "llmTrainingAgent.openChat",
+          "when": "view == llmTrainingAgent.chat",
+          "group": "navigation"
+        },
+        {
+          "command": "llmTrainingAgent.viewReport",
+          "when": "view == llmTrainingAgent.reports",
+          "group": "navigation"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "llmTrainingAgent.analyzeProject",
+          "when": "workspaceFolderCount > 0"
+        },
+        {
+          "command": "llmTrainingAgent.analyzeDataset",
+          "when": "workbenchState != 'empty'"
+        },
+        {
+          "command": "llmTrainingAgent.openChat"
+        },
+        {
+          "command": "llmTrainingAgent.viewReport"
+        },
+        {
+          "command": "llmTrainingAgent.configureProvider"
         }
       ]
     },
@@ -70,20 +139,28 @@
       "properties": {
         "llmTrainingAgent.backendUrl": {
           "type": "string",
-          "default": "http://127.0.0.1:8000"
+          "default": "http://127.0.0.1:8000",
+          "description": "Backend API base URL"
         },
         "llmTrainingAgent.provider": {
           "type": "string",
           "enum": [
             "ollama",
             "openai",
-            "anthropic"
+            "anthropic",
+            "gemini",
+            "deepseek",
+            "cohere",
+            "openrouter",
+            "openai_compatible"
           ],
-          "default": "ollama"
+          "default": "ollama",
+          "description": "LLM provider"
         },
         "llmTrainingAgent.model": {
           "type": "string",
-          "default": "llama3.2"
+          "default": "llama3.2",
+          "description": "LLM model name"
         }
       }
     }
@@ -91,16 +168,22 @@
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
-    "test": "vitest"
+    "watch": "tsc -watch -p ./",
+    "test": "vitest",
+    "package": "vsce package",
+    "lint": "tsc --noEmit -p ./"
   },
   "dependencies": {
     "axios": "^1.6.0"
   },
   "devDependencies": {
+    "@types/mocha": "^10.0.6",
     "@types/node": "^20.0.0",
     "@types/vscode": "^1.85.0",
-    "@vscode/test-electron": "^2.3.0",
-    "typescript": "^5.3.0",
-    "vitest": "^1.0.0"
+    "@vscode/test-electron": "^2.4.1",
+    "@vscode/vsce": "^2.24.0",
+    "mocha": "^10.4.0",
+    "typescript": "^5.4.0",
+    "vitest": "^1.6.0"
   }
 }

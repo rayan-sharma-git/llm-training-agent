@@ -2,26 +2,15 @@
   "compilerOptions": {
     "target": "ES2021",
     "module": "commonjs",
-    "lib": [
-      "ES2021"
-    ],
-    "outDir": "../out",
-    "rootDir": ".",
+    "lib": ["ES2021"],
+    "outDir": "../out-test",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "types": [
-      "node",
-      "mocha"
-    ]
+    "types": ["node", "mocha"]
   },
-  "include": [
-    "**/*"
-  ],
-  "exclude": [
-    "../out",
-    "../node_modules"
-  ]
+  "include": ["**/*", "../src/**/*"],
+  "exclude": ["../out", "../out-test", "../node_modules"]
 }

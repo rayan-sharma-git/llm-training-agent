@@ -1,9 +1,9 @@
 import * as vscode from 'vscode';
 
 /**
- * Simple tree item representing a single node in a view.
+ * A simple tree item representing a single node in a sidebar view.
  */
-class SimpleTreeItem extends vscode.TreeItem {
+export class SimpleTreeItem extends vscode.TreeItem {
   constructor(
     public readonly label: string,
     public readonly collapsibleState: vscode.TreeItemCollapsibleState,
@@ -14,8 +14,8 @@ class SimpleTreeItem extends vscode.TreeItem {
 }
 
 /**
- * A minimal TreeDataProvider that displays a list of string entries.
- * Used by the Overview, Chat, and Report sidebar views.
+ * Minimal TreeDataProvider that displays a list of string entries.
+ * Used by the Overview and Reports sidebar views.
  */
 export class SimpleTreeDataProvider implements vscode.TreeDataProvider<SimpleTreeItem> {
   private _onDidChangeTreeData = new vscode.EventEmitter<SimpleTreeItem | undefined | void>();

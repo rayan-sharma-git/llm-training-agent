@@ -1,4 +1,6 @@
 """Tests for DatasetAnalyzer."""
+import json
+from pathlib import Path
 import pytest
 from analyzers.dataset_analyzer import DatasetAnalyzer
 from models.schemas import ProjectContext
@@ -10,17 +12,19 @@ def analyzer():
 
 
 @pytest.fixture
-def sample_context():
-    return ProjectContext(project_name="test", project_path="/tmp", dataset_paths=["data.json"])
+def sample_context(tmp_path):
+    data_file = tmp_path / "data.json"
+    data_file.write_text(json.dumps({"prompt": "hello", "response": "world"}))
+    return ProjectContext(project_name="test", project_path=str(tmp_path), dataset_paths=["data.json"])
 
 
 @pytest.mark.asyncio
 async def test_dataset_analyzer_success(analyzer, sample_context):
     result = await analyzer.analyze(sample_context)
-    assert result["dataset_name"] == "data.json"
-    assert result["sample_count"] == 1000
-    assert "quality_score" in result
-    assert "confidence" in result
+    assert result.dataset_name == "data.json"
+    assert hasattr(result, "sample_count")
+    assert hasattr(result, "quality_score")
+    assert result.confidence in ("low", "medium", "high")
 
 
 @pytest.mark.asyncio

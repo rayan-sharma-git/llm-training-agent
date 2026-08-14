@@ -12,7 +12,7 @@ describe('SimpleTreeDataProvider', () => {
       { label: 'B' },
     ]);
 
-    const items = provider.getChildren();
+    const items = provider.getChildren() as any[];
     expect(items?.length).toBe(2);
     expect(items?.[0].label).toBe('A');
     expect(items?.[1].label).toBe('B');
@@ -20,7 +20,7 @@ describe('SimpleTreeDataProvider', () => {
 
   it('should return fallback when empty', () => {
     const provider = new SimpleTreeDataProvider([]);
-    const items = provider.getChildren();
+    const items = provider.getChildren() as SimpleTreeDataProvider['getChildren'] extends (x: never) => infer R ? R : never;
     expect(items?.length).toBe(1);
     expect(items?.[0].label).toBe('No data available');
   });
@@ -28,7 +28,7 @@ describe('SimpleTreeDataProvider', () => {
   it('should refresh entries', () => {
     const provider = new SimpleTreeDataProvider([]);
     provider.refresh([{ label: 'New' }]);
-    const items = provider.getChildren();
+    const items = provider.getChildren() as SimpleTreeDataProvider['getChildren'] extends (x: never) => infer R ? R : never;
     expect(items?.length).toBe(1);
     expect(items?.[0].label).toBe('New');
   });
@@ -40,7 +40,7 @@ describe('SimpleTreeDataProvider', () => {
         command: { command: 'cmd', title: 'Run' },
       },
     ]);
-    const items = provider.getChildren();
+    const items = provider.getChildren() as SimpleTreeDataProvider['getChildren'] extends (x: never) => infer R ? R : never;
     expect(items?.[0].command?.command).toBe('cmd');
   });
 });
@@ -55,3 +55,4 @@ describe('registerTreeView', () => {
     expect(provider).toBeInstanceOf(SimpleTreeDataProvider);
   });
 });
+</arg_value></tool_call>

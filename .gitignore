@@ -133,8 +133,6 @@ temp/
 *~
 
 # Project-specific
-s -ExecutionPolicy RemoteSigned) ; (& dDocumentsLLM_Training_Agentvenv310ScriptsActivate.ps1)
-
 steps.txt
 
 # Test fixtures (downloaded datasets)
@@ -177,6 +175,9 @@ PROJECT_TEMPLATE/extension/dist/
 # VS Code test downloads (large files, should never be committed)
 PROJECT_TEMPLATE/extension/.vscode-test/
 PROJECT_TEMPLATE/extension/out_backup.zip
+
+# VS Code test build artifacts (compiled from tests/)
+PROJECT_TEMPLATE/extension/out-test/
 
 # Backend build artifacts
 backend/*.pyc

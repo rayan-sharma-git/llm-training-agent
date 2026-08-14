@@ -7,7 +7,7 @@ from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 
-from storage.database import Base, get_session_factory
+from storage.database import Base
 from models.schemas import ProjectContext
 from api.routes import router
 from core.config import get_settings
@@ -20,18 +20,21 @@ def pytest_configure(config):
 
 @pytest.fixture(scope="session")
 def event_loop():
-    loop = asyncio.get_event_loop_policy().new_event_loop()
+    loop = asyncio.new_event_loop()
     yield loop
     loop.close()
 
 
 @pytest.fixture
 async def db_session():
+    """In-memory SQLite session for tests."""
     engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    factory = get_session_factory(engine)
-    async with factory() as session:
+    session_factory = sessionmaker(
+        engine, class_=AsyncSession, expire_on_commit=False
+    )
+    async with session_factory() as session:
         yield session
     await engine.dispose()
 

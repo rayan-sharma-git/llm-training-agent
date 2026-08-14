@@ -24,7 +24,3 @@ export function run(): Promise<void> {
     }
   });
 }
-
-// The @vscode/test-electron runner calls run() automatically.
-// This is also kept for direct invocation.
-run();
