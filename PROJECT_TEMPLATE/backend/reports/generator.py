@@ -19,7 +19,7 @@ from models.schemas import (
 class ReportGenerator:
     """Generates comprehensive engineering reports."""
     
-    def generate(self, context: ProjectContext, dataset_result: DatasetAnalysisResult, prompt_result: PromptAnalysisResult, hp_result: HyperparameterAnalysisResult, model_result: ModelAnalysisResult, cost_result: CostEstimate, prediction_result: PredictionResult, recommendations: List[Recommendation]) -> EngineeringReport:
+    def generate(self, context: ProjectContext, dataset_result: DatasetAnalysisResult, prompt_result: PromptAnalysisResult, hp_result: HyperparameterAnalysisResult, model_result: ModelAnalysisResult, cost_result: CostEstimate, prediction_result: PredictionResult, recommendations: List[Recommendation], gpu_time_estimate=None, hardware_detection=None) -> EngineeringReport:
         """Generate engineering report from all analysis results."""
         logging.info("Generating report")
         
@@ -59,7 +59,30 @@ class ReportGenerator:
             "gpu_hours": cost_result.estimated_gpu_hours,
             "confidence": cost_result.confidence,
         }
-        
+
+        # GPU estimate & hardware data for report
+        gpu_estimate_model = None
+        if gpu_time_estimate:
+            from models.schemas import GPUTimeEstimate
+            try:
+                if isinstance(gpu_time_estimate, GPUTimeEstimate):
+                    gpu_estimate_model = gpu_time_estimate
+                elif isinstance(gpu_time_estimate, dict):
+                    gpu_estimate_model = GPUTimeEstimate(**{k: v for k, v in gpu_time_estimate.items() if k in GPUTimeEstimate.model_fields})
+            except Exception as e:
+                logging.warning(f"Failed to create GPUTimeEstimate: {e}")
+
+        hardware_model = None
+        if hardware_detection:
+            from models.schemas import HardwareInfo
+            try:
+                if isinstance(hardware_detection, HardwareInfo):
+                    hardware_model = hardware_detection
+                elif isinstance(hardware_detection, dict):
+                    hardware_model = HardwareInfo(**{k: v for k, v in hardware_detection.items() if k in HardwareInfo.model_fields})
+            except Exception as e:
+                logging.warning(f"Failed to create HardwareInfo: {e}")
+
         # Compute scores
         project_health_score = self._compute_health_score(dataset_result, hp_result, model_result)
         training_readiness_score = self._compute_readiness_score(dataset_result, hp_result, model_result)
@@ -82,6 +105,8 @@ class ReportGenerator:
             model_summary=model_summary,
             prediction_summary=prediction_summary,
             cost_summary=cost_summary,
+            gpu_time_estimate=gpu_estimate_model,
+            hardware_detection=hardware_model,
             prioritized_recommendations=recommendations,
             action_plan=action_plan,
         )

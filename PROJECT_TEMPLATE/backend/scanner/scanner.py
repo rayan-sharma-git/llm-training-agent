@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .framework_detector import FrameworkDetector
+from hardware.gpu_detector import detect_gpus
 
 logger = logging.getLogger(__name__)
 
@@ -138,8 +139,15 @@ class ProjectScanner:
         return None
 
     def _detect_hardware(self) -> Dict[str, Any]:
-        """Detect available hardware."""
-        return {"gpu_available": False, "cpu_count": 4}
+        """Detect available hardware (real GPU detection)."""
+        try:
+            hardware = detect_gpus()
+            hw_dict = hardware.to_dict()
+            hw_dict["gpu_available"] = hardware.gpu_count > 0
+            return hw_dict
+        except Exception as e:
+            logger.warning(f"GPU detection failed during scan: {e}")
+            return {"gpu_available": False, "cpu_count": 4, "error": str(e)}
 
     def _compute_statistics(self) -> Dict[str, Any]:
         """Compute project statistics."""

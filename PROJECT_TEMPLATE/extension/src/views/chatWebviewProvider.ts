@@ -52,6 +52,20 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
     );
   }
 
+  /**
+   * Post an assistant message to the chat view (used by other commands).
+   */
+  public postAssistantMessage(text: string): void {
+    if (!this._view) {
+      return;
+    }
+    this._view.webview.postMessage({
+      command: 'appendMessage',
+      role: 'assistant',
+      text,
+    });
+  }
+
   private async _handleSendMessage(text: string): Promise<void> {
     if (!this._view) {
       return;

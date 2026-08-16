@@ -240,4 +240,28 @@ export class ApiClient {
     });
     return response.data;
   }
+
+  // ------------------------------------------------------------------
+  // GPU detection & time estimation
+  // ------------------------------------------------------------------
+
+  async detectGpu(): Promise<any> {
+    const response = await this.client.get('/api/v1/gpu/detect');
+    return response.data;
+  }
+
+  async listGpuSpecs(): Promise<{ gpus: string[] }> {
+    const response = await this.client.get('/api/v1/gpu/specs');
+    return response.data;
+  }
+
+  async estimateGpuTime(request: Record<string, any>): Promise<any> {
+    const response = await this.client.post('/api/v1/gpu/estimate', request);
+    return response.data;
+  }
+
+  async calibrateGpu(request: Record<string, any>): Promise<any> {
+    const response = await this.client.post('/api/v1/gpu/calibrate', request);
+    return response.data;
+  }
 }

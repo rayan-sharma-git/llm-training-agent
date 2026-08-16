@@ -127,6 +127,70 @@ class CostEstimate(BaseModel):
     confidence: str = "medium"
 
 
+class GPUInfo(BaseModel):
+    """Information about a single detected GPU."""
+    index: int
+    name: str
+    vram_mb: Optional[int] = None
+    vram_gb: Optional[float] = None
+    compute_capability: Optional[str] = None
+    utilization_percent: Optional[float] = None
+    memory_utilization_percent: Optional[float] = None
+    driver_version: Optional[str] = None
+    cuda_version: Optional[str] = None
+
+
+class HardwareInfo(BaseModel):
+    """Overall hardware detection result."""
+    cuda_available: bool = False
+    cuda_version: Optional[str] = None
+    gpus: List[GPUInfo] = []
+    gpu_count: int = 0
+    heterogeneous: bool = False
+    total_vram_mb: int = 0
+    max_vram_mb: int = 0
+    min_vram_mb: int = 0
+    detection_method: str = "none"
+    error: Optional[str] = None
+
+
+class GPUTimeEstimate(BaseModel):
+    """GPU training time estimation result."""
+    mode: str = "quick"  # quick or calibrated
+    estimated_seconds: float = 0
+    lower_bound_seconds: float = 0
+    upper_bound_seconds: float = 0
+    estimated_time: str = "unknown"
+    range: str = "unknown"
+    confidence: str = "low"
+    throughput_steps_per_sec: Optional[float] = None
+    throughput_samples_per_sec: Optional[float] = None
+    throughput_tokens_per_sec: Optional[float] = None
+    total_steps: int = 0
+    vram_feasible: bool = True
+    vram_warning: Optional[str] = None
+    vram_estimated_gb: Optional[float] = None
+    vram_available_gb: Optional[float] = None
+    assumptions: List[str] = []
+    warnings: List[str] = []
+    gpu_info: Dict[str, Any] = {}
+    calibration_used: bool = False
+
+
+class CalibrationResult(BaseModel):
+    """Calibration benchmark result."""
+    success: bool = False
+    measured_steps_per_sec: Optional[float] = None
+    measured_samples_per_sec: Optional[float] = None
+    measured_tokens_per_sec: Optional[float] = None
+    benchmark_duration_seconds: Optional[float] = None
+    benchmark_batch_size: Optional[int] = None
+    benchmark_seq_len: Optional[int] = None
+    benchmark_model_params: Optional[float] = None
+    gpu_name: Optional[str] = None
+    error: Optional[str] = None
+
+
 class Recommendation(BaseModel):
     """Single recommendation."""
     recommendation_id: str
@@ -156,6 +220,8 @@ class EngineeringReport(BaseModel):
     model_summary: Dict[str, Any] = {}
     prediction_summary: Dict[str, Any] = {}
     cost_summary: Dict[str, Any] = {}
+    gpu_time_estimate: Optional[GPUTimeEstimate] = None
+    hardware_detection: Optional[HardwareInfo] = None
     prioritized_recommendations: List[Recommendation] = []
     action_plan: List[str] = []
 

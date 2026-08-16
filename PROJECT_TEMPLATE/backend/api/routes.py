@@ -17,9 +17,20 @@ from models.schemas import (
     ModelAnalysisResult,
     PredictionResult,
     CostEstimate,
+    GPUTimeEstimate,
+    CalibrationResult,
+    HardwareInfo,
+    GPUInfo,
     Recommendation,
     EngineeringReport,
     ApiError,
+)
+from hardware.gpu_detector import detect_gpus, detect_gpus_dict, GPUSpec
+from hardware.gpu_time_estimator import (
+    GPUTimeEstimator,
+    TrainingConfig,
+    extract_training_config_from_context,
+    run_calibration_benchmark,
 )
 from scanner.scanner import ProjectScanner
 from scanner.context_builder import ContextBuilder
@@ -424,12 +435,32 @@ async def analyze_project(request: Dict[str, str]):
             logger.error(f"RecommendationEngine failed: {e}")
             recommendations = []
 
+        # Step 5b: GPU detection & time estimation (integrated into analysis)
+        gpu_time_estimate = None
+        hardware_result = None
+        try:
+            from hardware.gpu_detector import detect_gpus
+            from hardware.gpu_time_estimator import (
+                GPUTimeEstimator,
+                extract_training_config_from_context,
+            )
+
+            hardware_result = detect_gpus().to_dict()
+            training_config = extract_training_config_from_context(context)
+            estimator = GPUTimeEstimator()
+            estimate_result = estimator.estimate(training_config, mode="quick")
+            gpu_time_estimate = estimate_result.to_dict()
+        except Exception as e:
+            logger.warning(f"GPU time estimation failed during analysis: {e}")
+
         # Step 6: Report
         try:
             report_gen = ReportGenerator()
             report = report_gen.generate(
                 context, ds_result, prompt_result, hp_result, model_result,
-                cost_result, prediction_result, recommendations
+                cost_result, prediction_result, recommendations,
+                gpu_time_estimate=gpu_time_estimate,
+                hardware_detection=hardware_result,
             )
         except Exception as e:
             logger.error(f"ReportGenerator failed: {e}")
@@ -593,6 +624,126 @@ async def estimate_cost(request: Dict[str, Any]):
     except Exception as e:
         logger.error(f"Cost estimation failed: {e}")
         raise HTTPException(status_code=500, detail={"errorCode": "ESTIMATION_FAILED", "message": str(e)})
+
+
+# ---------------------------------------------------------------------------
+# GPU detection & time estimation
+# ---------------------------------------------------------------------------
+
+@router.get("/gpu/detect")
+async def detect_gpu_hardware():
+    """Detect GPU hardware on the current machine."""
+    try:
+        hardware = detect_gpus()
+        return hardware.to_dict()
+    except Exception as e:
+        logger.error(f"GPU detection failed: {e}")
+        raise HTTPException(status_code=500, detail={"errorCode": "GPU_DETECTION_FAILED", "message": str(e)})
+
+
+@router.get("/gpu/specs")
+async def list_gpu_specs():
+    """List known GPU specifications in the performance database."""
+    return {"gpus": GPUSpec.get_known_keys()}
+
+
+@router.post("/gpu/estimate")
+async def estimate_gpu_time(request: Dict[str, Any]):
+    """Estimate GPU training time.
+
+    Request body:
+    {
+        "projectPath": "/path/to/project",  # optional - uses existing context
+        "mode": "quick" | "calibrated",     # default: quick
+        "measuredStepsPerSec": 2.84,        # optional - for calibrated mode
+        "config": {                          # optional - override training config
+            "modelName": "TinyLlama 1.1B",
+            "paramCountBillions": 1.1,
+            "datasetSamples": 50000,
+            "sequenceLength": 512,
+            "batchSize": 4,
+            "gradientAccumulation": 8,
+            "epochs": 3,
+            "maxSteps": null,
+            "precision": "4bit",
+            "trainingMethod": "qlora",
+            "gradientCheckpointing": false,
+            "dataloaderWorkers": 0,
+            "framework": "huggingface",
+            "distributedStrategy": "single"
+        }
+    }
+    """
+    try:
+        # Build training config
+        config_data = request.get("config") or {}
+        training_config = TrainingConfig(
+            model_name=config_data.get("modelName"),
+            param_count_billions=config_data.get("paramCountBillions"),
+            dataset_samples=config_data.get("datasetSamples"),
+            sequence_length=config_data.get("sequenceLength", 512),
+            batch_size=config_data.get("batchSize", 8),
+            gradient_accumulation=config_data.get("gradientAccumulation", 1),
+            epochs=config_data.get("epochs", 3),
+            max_steps=config_data.get("maxSteps"),
+            precision=config_data.get("precision", "fp16"),
+            training_method=config_data.get("trainingMethod", "full"),
+            gradient_checkpointing=config_data.get("gradientCheckpointing", False),
+            dataloader_workers=config_data.get("dataloaderWorkers", 0),
+            framework=config_data.get("framework", "huggingface"),
+            distributed_strategy=config_data.get("distributedStrategy", "single"),
+        )
+
+        # If projectPath provided, try to extract config from project
+        project_path = request.get("projectPath")
+        if project_path and not config_data:
+            try:
+                scanner = ProjectScanner(project_path)
+                scan_result = scanner.scan()
+                context_builder = ContextBuilder()
+                context = context_builder.build(scan_result)
+                training_config = extract_training_config_from_context(context)
+            except Exception as e:
+                logger.warning(f"Failed to extract config from project: {e}")
+
+        mode = request.get("mode", "quick")
+        measured_steps = request.get("measuredStepsPerSec")
+
+        estimator = GPUTimeEstimator()
+        result = estimator.estimate(training_config, mode=mode, measured_steps_per_sec=measured_steps)
+        return result.to_dict()
+    except Exception as e:
+        logger.error(f"GPU time estimation failed: {e}")
+        raise HTTPException(status_code=500, detail={"errorCode": "GPU_ESTIMATION_FAILED", "message": str(e)})
+
+
+@router.post("/gpu/calibrate")
+async def calibrate_gpu(request: Dict[str, Any]):
+    """Run a short calibration benchmark to measure actual GPU throughput.
+
+    Request body:
+    {
+        "durationSeconds": 30,  # optional - default 30, max 60
+        "config": {              # optional - training config for benchmark
+            "batchSize": 4,
+            "sequenceLength": 512,
+            "paramCountBillions": 1.1
+        }
+    }
+    """
+    try:
+        duration = request.get("durationSeconds", 30)
+        config_data = request.get("config") or {}
+        training_config = TrainingConfig(
+            batch_size=config_data.get("batchSize", 4),
+            sequence_length=config_data.get("sequenceLength", 512),
+            param_count_billions=config_data.get("paramCountBillions"),
+        )
+        result = run_calibration_benchmark(training_config, duration_seconds=duration)
+        return result
+    except Exception as e:
+        logger.error(f"Calibration benchmark failed: {e}")
+        raise HTTPException(status_code=500, detail={"errorCode": "CALIBRATION_FAILED", "message": str(e)})
 
 
 # ---------------------------------------------------------------------------
