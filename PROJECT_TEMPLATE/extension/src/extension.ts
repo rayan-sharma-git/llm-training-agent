@@ -81,7 +81,7 @@ export async function activate(context: vscode.ExtensionContext) {
     );
 
     // --- Commands ---
-    registerAnalyzerCommands(context, apiClient, settings, overviewProvider, chatProvider, startupPromise);
+    registerAnalyzerCommands(context, apiClient, settings, overviewProvider, chatProvider, startupPromise, backendManager);
     registerChatCommands(context, apiClient, settings, startupPromise);
     context.subscriptions.push(
       vscode.commands.registerCommand('llmTrainingAgent.configureProvider', async () => {

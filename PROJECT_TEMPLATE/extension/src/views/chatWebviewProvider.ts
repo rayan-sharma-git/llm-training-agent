@@ -6,12 +6,17 @@ import { formatError } from '../utils';
  * A WebviewViewProvider that renders a functional chat interface
  * in the sidebar. Messages are sent to the backend API and the
  * assistant's response is displayed in a scrollable conversation view.
+ *
+ * Supports action cards — interactive messages that present the user
+ * with buttons (e.g. [Install Dependencies] [Cancel]).
  */
 export class ChatWebviewProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'llmTrainingAgent.chat';
 
   private _view?: vscode.WebviewView;
   private _disposables: vscode.Disposable[] = [];
+  /** Resolve a pending action-button promise, keyed by action id. */
+  private _actionResolvers: Map<string, (action: string) => void> = new Map();
 
   constructor(
     private readonly _extensionUri: vscode.Uri,
@@ -45,6 +50,16 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
             await this._handleSendMessage(text);
             break;
           }
+          case 'actionButtonClicked': {
+            const actionId = message.actionId as string;
+            const action = message.action as string;
+            const resolver = this._actionResolvers.get(actionId);
+            if (resolver) {
+              resolver(action);
+              this._actionResolvers.delete(actionId);
+            }
+            break;
+          }
         }
       },
       null,
@@ -63,6 +78,34 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
       command: 'appendMessage',
       role: 'assistant',
       text,
+    });
+  }
+
+  /**
+   * Post an action card — a message with clickable buttons — to the chat view.
+   * Returns a promise that resolves to the action label the user clicked.
+   * If the view is not available, the promise resolves to an empty string.
+   */
+  public postActionCard(options: {
+    text: string;
+    actionId: string;
+    buttons: Array<{ label: string; action: string }>;
+  }): Promise<string> {
+    return new Promise((resolve) => {
+      if (!this._view) {
+        resolve('');
+        return;
+      }
+
+      // Store the resolver so the webview message handler can call it.
+      this._actionResolvers.set(options.actionId, resolve);
+
+      this._view.webview.postMessage({
+        command: 'showActionCard',
+        actionId: options.actionId,
+        text: options.text,
+        buttons: options.buttons,
+      });
     });
   }
 
@@ -151,6 +194,49 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
       font-size: 0.85em;
       opacity: 0.8;
     }
+    .action-card {
+      align-self: flex-start;
+      background: var(--vscode-editor-inlineValues-background, var(--vscode-editor-background));
+      color: var(--vscode-foreground);
+      border: 1px solid var(--vscode-panel-border);
+      border-radius: 6px;
+      padding: 10px;
+      max-width: 95%;
+      word-wrap: break-word;
+      white-space: pre-wrap;
+      line-height: 1.4;
+    }
+    .action-card .card-text {
+      margin-bottom: 10px;
+    }
+    .action-card .card-buttons {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .action-card .card-buttons button {
+      padding: 6px 14px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: var(--vscode-font-size);
+    }
+    .action-card .card-buttons .primary-btn {
+      background: var(--vscode-button-background);
+      color: var(--vscode-button-foreground);
+    }
+    .action-card .card-buttons .primary-btn:hover {
+      background: var(--vscode-button-hoverBackground);
+    }
+    .action-card .card-buttons .secondary-btn {
+      background: var(--vscode-button-secondaryBackground, var(--vscode-editor-background));
+      color: var(--vscode-button-secondaryForeground, var(--vscode-foreground));
+      border: 1px solid var(--vscode-panel-border);
+    }
+    .action-card .card-buttons .secondary-btn:hover {
+      background: var(--vscode-button-secondaryHoverBackground, var(--vscode-list-hoverBackground));
+    }
     #input-row {
       display: flex;
       gap: 6px;
@@ -222,6 +308,41 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
       messagesEl.scrollTop = messagesEl.scrollHeight;
     }
 
+    function showActionCard(actionId, text, buttons) {
+      const placeholder = document.querySelector('.placeholder');
+      if (placeholder) placeholder.remove();
+      const card = document.createElement('div');
+      card.className = 'action-card';
+      card.dataset.actionId = actionId;
+
+      const textDiv = document.createElement('div');
+      textDiv.className = 'card-text';
+      textDiv.textContent = text;
+      card.appendChild(textDiv);
+
+      const btnRow = document.createElement('div');
+      btnRow.className = 'card-buttons';
+      buttons.forEach(function(btn, index) {
+        const button = document.createElement('button');
+        button.textContent = btn.label;
+        button.className = index === 0 ? 'primary-btn' : 'secondary-btn';
+        button.addEventListener('click', function() {
+          // Disable all buttons to prevent double-clicks
+          const allBtns = btnRow.querySelectorAll('button');
+          allBtns.forEach(function(b) { b.disabled = true; });
+          vscode.postMessage({
+            command: 'actionButtonClicked',
+            actionId: actionId,
+            action: btn.action
+          });
+        });
+        btnRow.appendChild(button);
+      });
+      card.appendChild(btnRow);
+      messagesEl.appendChild(card);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
     function send() {
       const text = input.value.trim();
       if (!text) return;
@@ -241,15 +362,21 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
 
     window.addEventListener('message', (event) => {
       const message = event.data;
-      if (message.command === 'appendMessage') {
-        const meta = message.role === 'assistant'
-          ? {
-              confidence: message.confidence,
-              refs: message.references,
-            }
-          : undefined;
-        appendMessage(message.role, message.text, meta);
-        sendBtn.disabled = false;
+      switch (message.command) {
+        case 'appendMessage':
+          const meta = message.role === 'assistant'
+            ? {
+                confidence: message.confidence,
+                refs: message.references,
+              }
+            : undefined;
+          appendMessage(message.role, message.text, meta);
+          sendBtn.disabled = false;
+          break;
+        case 'showActionCard':
+          showActionCard(message.actionId, message.text, message.buttons);
+          sendBtn.disabled = false;
+          break;
       }
     });
   </script>

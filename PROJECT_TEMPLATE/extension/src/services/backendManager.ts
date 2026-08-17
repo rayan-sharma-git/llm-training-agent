@@ -224,6 +224,21 @@ export class BackendManager {
   }
 
   /**
+   * Resolve the backend entry point (backend/main.py) using the same
+   * resolution order as start().
+   */
+  getBackendPath(): string | null {
+    return this.findBackendPath();
+  }
+
+  /**
+   * Resolve the Python executable used to run the backend.
+   */
+  getPythonExecutable(): string {
+    return this.findPythonExecutable();
+  }
+
+  /**
    * Get the backend URL.
    */
   getBaseUrl(): string {

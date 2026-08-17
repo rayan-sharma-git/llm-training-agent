@@ -3,6 +3,8 @@ import { ApiClient } from '../services/apiClient';
 import { SettingsManager } from '../services/settings';
 import { SimpleTreeDataProvider } from '../views/simpleTreeView';
 import { ChatWebviewProvider } from '../views/chatWebviewProvider';
+import { BackendManager } from '../services/backendManager';
+import { checkDependencies, installDependencies, DependencyCheckResult } from '../services/dependencyManager';
 
 /**
  * Formats and displays GPU training estimate in the chat.
@@ -68,8 +70,82 @@ function formatGpuEstimateForChat(gpuEstimate: any): string {
 }
 
 /**
+ * Build the human-readable message shown to the user when dependencies are missing.
+ */
+function buildMissingDepsMessage(result: DependencyCheckResult): string {
+  const missingList = result.missing.length > 0
+    ? result.missing.join(', ')
+    : 'one or more packages';
+  return [
+    '⚠️ Required backend dependencies are missing.',
+    '',
+    `Missing: ${missingList}`,
+    '',
+    'Analyze Project cannot start until they are installed.',
+    '',
+    'Would you like me to install the required dependencies?',
+    '',
+    'Manual command:',
+    '```',
+    result.manualCommand,
+    '```',
+  ].join('\n');
+}
+
+/**
+ * Ask the user for permission to install missing dependencies.
+ *
+ * Prefers the chat window (action card with [Install Dependencies] [Cancel]).
+ * Falls back to a modal VS Code dialog if the chat view is not available.
+ *
+ * Returns 'install' | 'cancel' | '' (no decision).
+ */
+async function askPermissionToInstall(
+  chatProvider: ChatWebviewProvider | null,
+  result: DependencyCheckResult
+): Promise<'install' | 'cancel' | ''> {
+  const message = buildMissingDepsMessage(result);
+
+  // Prefer the chat window action card.
+  if (chatProvider) {
+    const actionId = `dep-install-${Date.now()}`;
+    const choice = await chatProvider.postActionCard({
+      text: message,
+      actionId,
+      buttons: [
+        { label: 'Install Dependencies', action: 'install' },
+        { label: 'Cancel', action: 'cancel' },
+      ],
+    });
+    if (choice === 'install') {
+      return 'install';
+    }
+    if (choice === 'cancel') {
+      return 'cancel';
+    }
+    // No decision from chat (view not available) — fall through to modal.
+  }
+
+  // Fallback: modal dialog.
+  const selection = await vscode.window.showWarningMessage(
+    message,
+    { modal: true },
+    'Install Dependencies',
+    'Cancel'
+  );
+  if (selection === 'Install Dependencies') {
+    return 'install';
+  }
+  if (selection === 'Cancel') {
+    return 'cancel';
+  }
+  return '';
+}
+
+/**
  * Registers the project analysis command.
- * - llmTrainingAgent.analyzeProject : scans the workspace and refreshes the Overview view.
+ * - llmTrainingAgent.analyzeProject : checks backend dependencies, then scans
+ *   the workspace and refreshes the Overview view.
  */
 export function registerAnalyzerCommands(
   context: vscode.ExtensionContext,
@@ -77,7 +153,8 @@ export function registerAnalyzerCommands(
   settings: SettingsManager,
   overviewProvider: SimpleTreeDataProvider,
   chatProvider: ChatWebviewProvider | null = null,
-  startupPromise?: Promise<boolean>
+  startupPromise?: Promise<boolean>,
+  backendManager?: BackendManager
 ): void {
   const analyzeCommand = vscode.commands.registerCommand(
     'llmTrainingAgent.analyzeProject',
@@ -100,7 +177,82 @@ export function registerAnalyzerCommands(
         return;
       }
 
-      // Wait for the backend to be ready before sending the request.
+      // ------------------------------------------------------------------
+      // STEP 1: Check backend dependencies (read-only).
+      // ------------------------------------------------------------------
+      if (backendManager) {
+        const backendPath = backendManager.getBackendPath();
+        const pythonExe = backendManager.getPythonExecutable();
+
+        if (backendPath) {
+          const depResult = await checkDependencies({
+            pythonExe,
+            backendMainPath: backendPath,
+          });
+
+          if (!depResult.available) {
+            // STOP — do not start analysis. Ask for permission.
+            const choice = await askPermissionToInstall(chatProvider, depResult);
+
+            if (choice === 'install') {
+              // User explicitly approved installation.
+              const outputChannel = vscode.window.createOutputChannel('LLM Training Agent: Dependencies');
+              const backendDir = require('path').dirname(backendPath) as string;
+
+              const installOk = await new Promise<boolean>((resolve) => {
+                installDependencies({
+                  pythonExe,
+                  requirementsTxtPath: depResult.requirementsTxtPath || '',
+                  backendDir,
+                  outputChannel,
+                  onDone: (success) => resolve(success),
+                });
+              });
+
+              if (!installOk) {
+                vscode.window.showErrorMessage(
+                  'Dependency installation failed. Check the "LLM Training Agent: Dependencies" output channel.'
+                );
+                return;
+              }
+
+              // Verify again after installation.
+              const recheck = await checkDependencies({
+                pythonExe,
+                backendMainPath: backendPath,
+              });
+              if (!recheck.available) {
+                vscode.window.showErrorMessage(
+                  `Dependencies were installed but are still not importable: ${recheck.missing.join(', ')}`
+                );
+                return;
+              }
+
+              if (chatProvider) {
+                chatProvider.postAssistantMessage(
+                  '✅ Backend dependencies are now available. Starting analysis...'
+                );
+              }
+            } else {
+              // Cancel (or no decision) — do nothing, do not start analysis.
+              if (chatProvider) {
+                chatProvider.postAssistantMessage(
+                  'Analyze Project was cancelled because the required backend dependencies are missing.\n\n' +
+                  `You can install them manually with:\n\`\`\`\n${depResult.manualCommand}\n\`\`\``
+                );
+              }
+              vscode.window.showWarningMessage(
+                'Analyze Project was cancelled because the required backend dependencies are missing.'
+              );
+              return;
+            }
+          }
+        }
+      }
+
+      // ------------------------------------------------------------------
+      // STEP 2: Wait for the backend to be ready before sending the request.
+      // ------------------------------------------------------------------
       if (startupPromise) {
         const ok = await startupPromise;
         if (!ok) {
