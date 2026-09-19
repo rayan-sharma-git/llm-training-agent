@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional, Set
 
 from models.schemas import ProjectContext, DatasetAnalysisResult
 from ai.llm import LLMHelper
+from cleaning.dataset_io import read_records
 
 logger = logging.getLogger(__name__)
 
@@ -148,48 +149,12 @@ class DatasetAnalyzer:
         )
 
     def _read_dataset(self, path: Path) -> tuple[List[Dict[str, Any]], List[str]]:
-        """Read a dataset file (JSONL, CSV, or JSON) and return list of record dicts."""
-        records: List[Dict[str, Any]] = []
-        errors: List[str] = []
+        """Read a dataset file (JSONL, JSON, CSV, TSV or TXT) and return records.
 
-        suffix = path.suffix.lower()
-
-        try:
-            if suffix == ".jsonl":
-                for i, line in enumerate(path.read_text(encoding="utf-8").splitlines()):
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        records.append(json.loads(line))
-                    except json.JSONDecodeError as e:
-                        errors.append(f"Line {i+1}: {e}")
-            elif suffix == ".csv":
-                import csv
-                with open(path, newline="", encoding="utf-8") as f:
-                    reader = csv.DictReader(f)
-                    for row in reader:
-                        records.append(dict(row))
-            elif suffix == ".json":
-                data = json.loads(path.read_text(encoding="utf-8"))
-                if isinstance(data, list):
-                    records = data
-                elif isinstance(data, dict):
-                    if "data" in data and isinstance(data["data"], list):
-                        records = data["data"]
-                    else:
-                        records = [data]
-            elif suffix in (".txt", ".tsv"):
-                # Simple text format: assume prompt/response pairs separated by tabs or newlines
-                lines = path.read_text(encoding="utf-8").splitlines()
-                for i in range(0, len(lines) - 1, 2):
-                    records.append({"prompt": lines[i], "response": lines[i + 1]})
-            elif suffix == ".parquet":
-                errors.append("Parquet parsing requires pyarrow (not installed)")
-        except Exception as e:
-            errors.append(f"Failed to read {path}: {e}")
-
-        return records, errors
+        Delegates to the shared dataset I/O layer so that analysis and cleaning
+        always interpret a dataset file in exactly the same way.
+        """
+        return read_records(path)
 
     def _extract_text(self, record: Dict[str, Any]) -> Dict[str, str]:
         """Extract prompt/response text from a record, handling different field names."""

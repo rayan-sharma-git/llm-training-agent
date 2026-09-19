@@ -84,7 +84,7 @@ class ProjectScanner:
         return False
 
     def _discover_datasets(self) -> List[str]:
-        """Discover dataset files."""
+        """Discover dataset files (internal)."""
         patterns = ["*.json", "*.jsonl", "*.csv", "*.parquet", "*.txt", "*.tsv"]
         files = []
         for pattern in patterns:
@@ -92,6 +92,15 @@ class ProjectScanner:
                 if f.is_file() and not self._is_skipped(f):
                     files.append(str(f.relative_to(self.project_path)))
         return sorted(set(files))
+
+    def discover_datasets(self) -> List[str]:
+        """Public accessor for dataset discovery.
+
+        Returns project-relative dataset paths using exactly the same rules as
+        :meth:`scan`, without probing hardware or model configuration.  Used by
+        the chunked dataset cleaning endpoint.
+        """
+        return self._discover_datasets()
 
     def _discover_prompts(self) -> List[str]:
         """Discover prompt templates."""

@@ -47,7 +47,7 @@ Response:
 | POST | `/api/v1/dataset/analyze` | Analyze dataset quality |
 | POST | `/api/v1/dataset/duplicates` | Detect duplicate samples |
 | POST | `/api/v1/dataset/statistics` | Return dataset statistics |
-| POST | `/api/v1/dataset/clean` | Generate cleanup recommendations |
+| POST | `/api/v1/dataset/clean` | Clean every dataset file in LLM-sized chunks (one request per chunk) |
 
 ### 2.4 Prompt Analysis
 
@@ -202,6 +202,83 @@ Response:
 }
 ```
 
+### POST /dataset/clean
+
+Cleans **every** dataset file of a project. Each file is split into sequential
+chunks (max `chunkSize` records and `maxChunkChars` characters) and every chunk is
+sent to the AI provider in its own request. Cleaned files are written per source
+file (same relative path and format) next to a manifest. Records are never dropped:
+a chunk whose response fails validation keeps its original records.
+
+Request:
+```json
+{
+  "projectPath": "/path/to/project",
+  "datasetPaths": ["data/train.jsonl", "data/val.jsonl"],
+  "chunkSize": 25,
+  "maxChunkChars": 12000,
+  "outputDirectory": ".llm-training-agent/cleaned",
+  "maxFiles": 0,
+  "useLlm": true
+}
+```
+
+`projectPath` and `datasetPaths` are alternative targets (at least one is
+required); directory entries in `datasetPaths` are expanded recursively.
+
+Response:
+```json
+{
+  "files": [
+    {
+      "source_file": "/path/to/project/data/train.jsonl",
+      "relative_path": "data/train.jsonl",
+      "output_path": "/path/to/project/.llm-training-agent/cleaned/data/train.jsonl",
+      "format": "jsonl",
+      "records_in": 1200,
+      "records_out": 1200,
+      "chunks_total": 48,
+      "chunks_cleaned": 48,
+      "chunks_fallback": 0,
+      "chunk_summaries": [
+        { "chunk_index": 1, "record_count": 25, "records_cleaned": 25,
+          "llm_used": true, "status": "cleaned", "warnings": [] }
+      ],
+      "llm_used": true,
+      "records_preserved": true,
+      "warnings": [],
+      "errors": []
+    }
+  ],
+  "skipped_files": [],
+  "output_directory": "/path/to/project/.llm-training-agent/cleaned",
+  "manifest_path": "/path/to/project/.llm-training-agent/cleaned/cleaning_manifest.json",
+  "total_files": 1,
+  "total_records_in": 1200,
+  "total_records_out": 1200,
+  "total_chunks": 48,
+  "total_chunks_cleaned": 48,
+  "total_chunks_fallback": 0,
+  "records_preserved": true,
+  "cross_file_contamination": false,
+  "llm_used": true,
+  "chunk_size": 25,
+  "max_chunk_chars": 12000,
+  "warnings": [],
+  "confidence": "high"
+}
+```
+
+Errors: `400` when neither `projectPath` nor `datasetPaths` is given, `404` when
+the project path or a dataset file does not exist, `500` (`CLEANING_FAILED`) on an
+unexpected pipeline failure.
+
+### POST /project/analyze (optional dataset cleaning)
+
+Adding `"cleanDatasets": true` to the request body runs the same cleaning pipeline
+during project analysis (default `false`). The response then additionally contains
+a `cleaning` object with the `DatasetCleaningResult` shape shown above.
+
 ### POST /chat/message
 
 Request:
@@ -245,6 +322,7 @@ Response:
 | PROJECT_NOT_FOUND | Project path does not exist |
 | ANALYSIS_FAILED | Analysis encountered an error |
 | PROVIDER_UNAVAILABLE | AI provider is not responding |
+| CLEANING_FAILED | Dataset cleaning pipeline failed |
 | VALIDATION_ERROR | Input validation failed |
 | FILE_NOT_FOUND | Specified file not found |
 | MODIFICATION_FAILED | File modification could not be applied |

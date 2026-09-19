@@ -77,8 +77,17 @@ class LLMHelper:
         prompt: str,
         schema: Optional[Dict[str, Any]] = None,
         temperature: float = 0.7,
+        system_prompt: Optional[str] = None,
     ) -> Optional[str]:
         """Call the LLM and return the raw text response.
+
+        Args:
+            prompt: User prompt.
+            schema: Optional JSON schema hint (informational for providers).
+            temperature: Sampling temperature.
+            system_prompt: Optional system prompt override. When omitted the
+                shared analyst system prompt is used, preserving the behaviour
+                of all existing callers.
 
         Returns None if the provider is unavailable or the call fails.
         """
@@ -87,7 +96,7 @@ class LLMHelper:
             return None
 
         messages = [{"role": "user", "content": prompt}]
-        system = self.load_system_prompt()
+        system = system_prompt or self.load_system_prompt()
 
         try:
             response = await self.provider.chat_completion(
@@ -103,12 +112,22 @@ class LLMHelper:
         prompt: str,
         schema: Optional[Dict[str, Any]] = None,
         temperature: float = 0.7,
+        system_prompt: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """Call the LLM and request structured JSON output.
 
+        Accepts either a JSON object or a bare JSON array (the latter is
+        wrapped as ``{"items": [...]}``) so that batch (chunked) callers can
+        request arrays of cleaned records.
+
         Returns None if the provider is unavailable or the call fails.
         """
-        result = await self.call(prompt, schema=schema, temperature=temperature)
+        result = await self.call(
+            prompt,
+            schema=schema,
+            temperature=temperature,
+            system_prompt=system_prompt,
+        )
         if result is None:
             return None
         # Try to parse JSON from the response
@@ -121,7 +140,16 @@ class LLMHelper:
                 cleaned = cleaned[3:]
             if cleaned.endswith("```"):
                 cleaned = cleaned[:-3]
-            return json.loads(cleaned.strip())
+            payload = json.loads(cleaned.strip())
         except (json.JSONDecodeError, ValueError) as e:
             logger.warning(f"Failed to parse LLM JSON response: {e}")
             return None
+
+        # A bare JSON array is wrapped so that callers always receive a dict.
+        if isinstance(payload, list):
+            return {"items": payload}
+        if isinstance(payload, dict):
+            return payload
+
+        logger.warning("LLM JSON response was neither an object nor an array.")
+        return None

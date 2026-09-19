@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from models.schemas import (
     ProjectContext,
     DatasetAnalysisResult,
+    DatasetCleaningResult,
     PromptAnalysisResult,
     HyperparameterAnalysisResult,
     ModelAnalysisResult,
@@ -36,6 +37,7 @@ from scanner.scanner import ProjectScanner
 from scanner.context_builder import ContextBuilder
 from analyzers.dataset_analyzer import DatasetAnalyzer
 from analyzers.prompt_analyzer import PromptAnalyzer
+from cleaning.dataset_cleaner import DatasetCleaner
 from analyzers.hyperparameter_analyzer import HyperparameterAnalyzer
 from analyzers.model_advisor import ModelAdvisor
 from analyzers.cost_estimator import CostEstimator
@@ -55,6 +57,17 @@ router = APIRouter()
 # ---------------------------------------------------------------------------
 # Helpers for safe typed-result reconstruction
 # ---------------------------------------------------------------------------
+
+def _as_bool(value: Any, default: bool = False) -> bool:
+    """Coerce a JSON/string flag into a bool (used for optional request flags)."""
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    return str(value).strip().lower() in ("1", "true", "yes", "on", "enabled")
+
 
 def _safe_model(data: Dict[str, Any], model_cls: type, **defaults) -> Any:
     """Safely construct a Pydantic model from a results dict.
@@ -322,10 +335,14 @@ async def test_connection(request: TestConnectionRequest):
 # ---------------------------------------------------------------------------
 
 @router.post("/project/analyze", response_model=Dict[str, Any])
-async def analyze_project(request: Dict[str, str]):
+async def analyze_project(request: Dict[str, Any]):
     """Analyze an entire fine-tuning project.
 
     Request body:  {"projectPath": "/path/to/project"}
+
+    Optional flag: {"cleanDatasets": true} additionally runs the chunked
+    dataset cleaning pipeline (one LLM request per chunk, all dataset files)
+    and returns its summary under the ``cleaning`` key.
     """
     try:
         project_path = request.get("projectPath")
@@ -403,6 +420,21 @@ async def analyze_project(request: Dict[str, str]):
 
         logger.info("All analyzers completed (with possible partial failures)")
 
+        # Step 3b: Optional chunked dataset cleaning (opt-in, one LLM call per chunk)
+        if _as_bool(request.get("cleanDatasets"), False) and context.dataset_paths:
+            try:
+                cleaner = DatasetCleaner()
+                cleaning_result = await cleaner.clean_project(context)
+                results["dataset_cleaning"] = cleaning_result.model_dump()
+                logger.info(
+                    f"Dataset cleaning finished: {cleaning_result.total_files} file(s), "
+                    f"{cleaning_result.total_chunks} chunk(s), "
+                    f"records preserved={cleaning_result.records_preserved}"
+                )
+            except Exception as e:
+                logger.error(f"Dataset cleanup failed: {e}")
+                results["dataset_cleaning"] = {"error": str(e)}
+
         # Step 4: Predictions
         ds_result = _safe_model(results["dataset"], DatasetAnalysisResult, **_default_dataset_result().__dict__)
         hp_result = _safe_model(results["hyperparameters"], HyperparameterAnalysisResult, **_default_hp_result().__dict__)
@@ -472,7 +504,13 @@ async def analyze_project(request: Dict[str, str]):
                 action_plan=["Fix backend errors and re-run analysis."],
             )
 
-        return {"project": context.model_dump(), "report": report.model_dump()}
+        response: Dict[str, Any] = {
+            "project": context.model_dump(),
+            "report": report.model_dump(),
+        }
+        if results.get("dataset_cleaning") is not None:
+            response["cleaning"] = results["dataset_cleaning"]
+        return response
 
     except HTTPException:
         raise
@@ -531,6 +569,98 @@ async def analyze_dataset(request: Dict[str, Any]):
     except Exception as e:
         logger.error(f"Dataset analysis failed: {e}")
         raise HTTPException(status_code=500, detail={"errorCode": "ANALYSIS_FAILED", "message": str(e)})
+
+
+@router.post("/dataset/clean", response_model=DatasetCleaningResult)
+async def clean_datasets(request: Dict[str, Any]):
+    """Clean every dataset file of a project in LLM-sized chunks.
+
+    Request body (all fields optional except a project or dataset reference):
+
+    ```json
+    {
+      "projectPath": "/path/to/project",
+      "datasetPaths": ["data/train.jsonl", "data/val.jsonl"],
+      "chunkSize": 25,
+      "maxChunkChars": 12000,
+      "outputDirectory": ".llm-training-agent/cleaned",
+      "maxFiles": 0,
+      "useLlm": true
+    }
+    ```
+
+    * Every dataset file is discovered (a directory entry is expanded
+      recursively), then split into sequential chunks of ``chunkSize`` records
+      (and at most ``maxChunkChars`` characters).
+    * Each chunk is sent to the AI provider in its own request, so an entire
+      dataset is never sent in a single call.
+    * Cleaned files are written per source file, preserving the relative path
+      and format, together with a manifest for verification.  Every record of
+      every file is preserved; a chunk that fails validation keeps its original
+      records instead of losing data.
+    """
+    try:
+        from pathlib import Path
+
+        project_path = request.get("projectPath")
+        dataset_paths = list(request.get("datasetPaths") or [])
+
+        if not project_path and not dataset_paths:
+            raise HTTPException(
+                status_code=400,
+                detail="Either projectPath or datasetPaths is required.",
+            )
+
+        if project_path:
+            if not Path(project_path).exists():
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Project path does not exist: {project_path}",
+                )
+            # Discover dataset files with the same rules the scanner uses.
+            if not dataset_paths:
+                scanner = ProjectScanner(project_path)
+                dataset_paths = scanner.discover_datasets()
+                if not dataset_paths:
+                    raise HTTPException(
+                        status_code=404,
+                        detail="No dataset files were found in this project.",
+                    )
+        else:
+            first = Path(str(dataset_paths[0]))
+            project_path = str(first.parent if first.is_absolute() else Path.cwd())
+
+        chunk_size = int(request.get("chunkSize") or 0)
+        max_chunk_chars = int(request.get("maxChunkChars") or 0)
+        max_files = int(request.get("maxFiles") or 0)
+
+        cleaner = DatasetCleaner(
+            chunk_size=chunk_size or 25,
+            max_chunk_chars=max_chunk_chars or 12000,
+        )
+
+        context = ProjectContext(
+            project_name=Path(str(project_path)).name or "dataset_cleanup",
+            project_path=str(project_path),
+            dataset_paths=dataset_paths,
+        )
+
+        logger.info(f"Cleaning {len(dataset_paths)} dataset entry(ies) of {project_path}")
+        result = await cleaner.clean_project(
+            context,
+            output_dir=request.get("outputDirectory"),
+            max_files=max_files,
+            use_llm=_as_bool(request.get("useLlm"), True),
+        )
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Dataset cleaning failed: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail={"errorCode": "CLEANING_FAILED", "message": str(e)},
+        )
 
 
 @router.post("/prompt/analyze")

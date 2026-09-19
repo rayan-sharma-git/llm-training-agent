@@ -177,6 +177,27 @@ export class ApiClient {
     return response.data;
   }
 
+  /**
+   * Clean every dataset file of a project in LLM-sized chunks.
+   *
+   * The backend discovers all dataset files (a directory entry is expanded
+   * recursively), splits each file into sequential chunks and sends one
+   * request per chunk. Cleaned files are written per source file together with
+   * a manifest inside `<project>/.llm-training-agent/cleaned`.
+   */
+  async cleanDatasets(options: {
+    projectPath?: string;
+    datasetPaths?: string[];
+    chunkSize?: number;
+    maxChunkChars?: number;
+    outputDirectory?: string;
+    maxFiles?: number;
+    useLlm?: boolean;
+  } = {}): Promise<any> {
+    const response = await this.client.post('/api/v1/dataset/clean', options);
+    return response.data;
+  }
+
   async sendChatMessage(message: string): Promise<ChatResponse> {
     const response = await this.client.post('/api/v1/chat/message', {
       message,

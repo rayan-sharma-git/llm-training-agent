@@ -127,6 +127,12 @@ class GPUSpec:
         "gtx_1660": {"name": "NVIDIA GTX 1660", "tflops_fp16": 6.0, "vram_gb": 6, "family": "consumer"},
         "gtx_1080": {"name": "NVIDIA GTX 1080", "tflops_fp16": 11.0, "vram_gb": 8, "family": "consumer"},
         "gtx_1080_ti": {"name": "NVIDIA GTX 1080 Ti", "tflops_fp16": 13.0, "vram_gb": 11, "family": "consumer"},
+        # RTX 20-series
+        "rtx_2050": {"name": "NVIDIA GeForce RTX 2050", "tflops_fp16": 8.0, "vram_gb": 4, "family": "laptop"},
+        "rtx_2060": {"name": "NVIDIA RTX 2060", "tflops_fp16": 16.0, "vram_gb": 6, "family": "consumer"},
+        "rtx_2070": {"name": "NVIDIA RTX 2070", "tflops_fp16": 21.0, "vram_gb": 8, "family": "consumer"},
+        "rtx_2080": {"name": "NVIDIA RTX 2080", "tflops_fp16": 28.0, "vram_gb": 8, "family": "consumer"},
+        "rtx_2080_ti": {"name": "NVIDIA RTX 2080 Ti", "tflops_fp16": 33.0, "vram_gb": 11, "family": "consumer"},
     }
 
     @classmethod

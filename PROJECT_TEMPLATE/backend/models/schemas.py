@@ -48,6 +48,60 @@ class DatasetAnalysisResult(BaseModel):
     confidence: str = "medium"
 
 
+class ChunkCleaningSummary(BaseModel):
+    """Outcome of cleaning one chunk of records with a single LLM request."""
+
+    chunk_index: int
+    record_count: int
+    records_cleaned: int = 0
+    llm_used: bool = False
+    status: str = "cleaned"  # cleaned | fallback | failed
+    warnings: List[str] = []
+
+
+class FileCleaningSummary(BaseModel):
+    """Outcome of cleaning a single dataset file (all of its chunks)."""
+
+    source_file: str
+    relative_path: str
+    output_path: Optional[str] = None
+    format: str = "jsonl"
+    records_in: int = 0
+    records_out: int = 0
+    chunks_total: int = 0
+    chunks_cleaned: int = 0
+    chunks_fallback: int = 0
+    chunks_deterministic: int = 0
+    chunk_summaries: List[ChunkCleaningSummary] = []
+    llm_used: bool = False
+    records_preserved: bool = True
+    warnings: List[str] = []
+    errors: List[str] = []
+
+
+class DatasetCleaningResult(BaseModel):
+    """Aggregated result of cleaning every discovered dataset file."""
+
+    files: List[FileCleaningSummary] = []
+    skipped_files: List[str] = []
+    output_directory: Optional[str] = None
+    manifest_path: Optional[str] = None
+    total_files: int = 0
+    total_records_in: int = 0
+    total_records_out: int = 0
+    total_chunks: int = 0
+    total_chunks_cleaned: int = 0
+    total_chunks_fallback: int = 0
+    total_chunks_deterministic: int = 0
+    records_preserved: bool = True
+    cross_file_contamination: bool = False
+    llm_used: bool = False
+    chunk_size: int = 0
+    max_chunk_chars: int = 0
+    warnings: List[str] = []
+    confidence: str = "medium"
+
+
 class PromptAnalysisResult(BaseModel):
     """Prompt analysis results."""
     template_name: str
