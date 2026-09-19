@@ -285,4 +285,52 @@ export class ApiClient {
     const response = await this.client.post('/api/v1/gpu/calibrate', request);
     return response.data;
   }
+
+  // ------------------------------------------------------------------
+  // File changes: propose → view → apply/discard → rollback (View Changes)
+  // ------------------------------------------------------------------
+
+  async proposeFileChange(filePath: string, proposedContent: string, projectRoot?: string): Promise<any> {
+    const response = await this.client.post('/api/v1/files/propose', {
+      filePath,
+      proposedContent,
+      projectRoot,
+    });
+    return response.data;
+  }
+
+  async listFileChanges(projectRoot?: string): Promise<{ changes: any[] }> {
+    const response = await this.client.get('/api/v1/files/changes', {
+      params: projectRoot ? { projectRoot } : undefined,
+    });
+    return response.data;
+  }
+
+  async getFileChange(changeId: string, projectRoot?: string, includeContents = true): Promise<any> {
+    const response = await this.client.get(`/api/v1/files/changes/${changeId}`, {
+      params: { includeContents, ...(projectRoot ? { projectRoot } : {}) },
+    });
+    return response.data;
+  }
+
+  async applyFileChange(changeId: string, projectRoot?: string): Promise<any> {
+    const response = await this.client.post(`/api/v1/files/changes/${changeId}/apply`, {
+      projectRoot,
+    });
+    return response.data;
+  }
+
+  async discardFileChange(changeId: string, projectRoot?: string): Promise<any> {
+    const response = await this.client.post(`/api/v1/files/changes/${changeId}/discard`, {
+      projectRoot,
+    });
+    return response.data;
+  }
+
+  async rollbackFileChange(changeId: string, projectRoot?: string): Promise<any> {
+    const response = await this.client.post(`/api/v1/files/changes/${changeId}/rollback`, {
+      projectRoot,
+    });
+    return response.data;
+  }
 }

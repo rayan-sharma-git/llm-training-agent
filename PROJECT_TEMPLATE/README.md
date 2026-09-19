@@ -91,6 +91,18 @@ The **Settings view** (Activity Bar → LLM Training Agent → Settings) lets yo
 - **Cohere** — free trial tier — https://dashboard.cohere.com.
 - **OpenRouter** — several free models (`*-instruct:free`) — https://openrouter.ai.
 
+## Reviewing Agent File Changes ("View Changes")
+
+When the agent proposes a file modification, it is **never applied silently**. Every change is stored as a pending proposal that you review before accepting:
+
+1. Run **"LLM Training Agent: View Changes"** from the Command Palette (or the title-bar button).
+2. A QuickPick lists all pending proposed changes.
+3. Selecting one opens VS Code's **native diff editor** — original content on the left, the agent's proposal on the right.
+4. Choose **Apply** (change is written, with an automatic backup), **Discard** (file untouched), or **Rollback** (restore the file from backup).
+
+Pending proposals persist on disk (`.llm_training_agent/pending_changes/`), so you can review them even after a restart. Backups live in `.llm_training_agent_backups/`.
+
+## Troubleshooting
 > Free tiers change often — confirm current availability on the provider's official site.
 
 ## Troubleshooting

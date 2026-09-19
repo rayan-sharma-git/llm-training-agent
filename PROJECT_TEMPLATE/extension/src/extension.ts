@@ -4,6 +4,7 @@ import { ApiClient } from './services/apiClient';
 import { BackendManager } from './services/backendManager';
 import { registerAnalyzerCommands } from './commands/analyzerCommands';
 import { registerChatCommands } from './commands/chatCommands';
+import { registerChangeCommands } from './commands/changeCommands';
 import { registerTreeView } from './views/simpleTreeView';
 import { ChatWebviewProvider } from './views/chatWebviewProvider';
 import { SettingsWebviewProvider } from './views/settingsWebviewProvider';
@@ -83,6 +84,7 @@ export async function activate(context: vscode.ExtensionContext) {
     // --- Commands ---
     registerAnalyzerCommands(context, apiClient, settings, overviewProvider, chatProvider, startupPromise, backendManager);
     registerChatCommands(context, apiClient, settings, startupPromise);
+    registerChangeCommands(context, apiClient);
     context.subscriptions.push(
       vscode.commands.registerCommand('llmTrainingAgent.configureProvider', async () => {
         await settingsProvider.reveal();

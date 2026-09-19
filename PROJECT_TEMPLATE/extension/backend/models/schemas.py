@@ -71,6 +71,7 @@ class FileCleaningSummary(BaseModel):
     chunks_total: int = 0
     chunks_cleaned: int = 0
     chunks_fallback: int = 0
+    chunks_deterministic: int = 0
     chunk_summaries: List[ChunkCleaningSummary] = []
     llm_used: bool = False
     records_preserved: bool = True
@@ -91,6 +92,7 @@ class DatasetCleaningResult(BaseModel):
     total_chunks: int = 0
     total_chunks_cleaned: int = 0
     total_chunks_fallback: int = 0
+    total_chunks_deterministic: int = 0
     records_preserved: bool = True
     cross_file_contamination: bool = False
     llm_used: bool = False

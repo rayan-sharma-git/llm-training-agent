@@ -25,7 +25,8 @@
     "onCommand:llmTrainingAgent.analyzeDataset",
     "onCommand:llmTrainingAgent.openChat",
     "onCommand:llmTrainingAgent.viewReport",
-    "onCommand:llmTrainingAgent.configureProvider"
+    "onCommand:llmTrainingAgent.configureProvider",
+    "onCommand:llmTrainingAgent.viewChanges"
   ],
   "engines": {
     "vscode": "^1.85.0"
@@ -94,6 +95,12 @@
         "title": "Configure AI Provider",
         "category": "LLM Training Agent",
         "icon": "$(gear)"
+      },
+      {
+        "command": "llmTrainingAgent.viewChanges",
+        "title": "View Changes",
+        "category": "LLM Training Agent",
+        "icon": "$(diff)"
       }
     ],
     "menus": {
@@ -111,6 +118,11 @@
         {
           "command": "llmTrainingAgent.viewReport",
           "when": "view == llmTrainingAgent.reports",
+          "group": "navigation"
+        },
+        {
+          "command": "llmTrainingAgent.viewChanges",
+          "when": "view == llmTrainingAgent.overview",
           "group": "navigation"
         }
       ],
@@ -131,6 +143,9 @@
         },
         {
           "command": "llmTrainingAgent.configureProvider"
+        },
+        {
+          "command": "llmTrainingAgent.viewChanges"
         }
       ]
     },

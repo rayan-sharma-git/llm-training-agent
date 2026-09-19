@@ -1,7 +1,9 @@
 """FastAPI route handlers."""
 from __future__ import annotations
 
+import difflib
 import logging
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 from datetime import datetime
 
@@ -974,3 +976,181 @@ async def get_logs():
 async def get_metrics():
     """Return performance metrics."""
     return {"uptime_seconds": 0, "requests_total": 0}
+
+
+# ---------------------------------------------------------------------------
+# File changes: propose → view → apply/discard → rollback (View Changes)
+# ---------------------------------------------------------------------------
+
+from editing.file_editor import PendingChangeStore  # noqa: E402
+
+
+def _pending_store(project_root: Optional[str]) -> PendingChangeStore:
+    root = (project_root or "").strip() or str(Path.cwd())
+    return PendingChangeStore(Path(root))
+
+
+@router.post("/files/propose")
+async def propose_file_change(request: Dict[str, Any]):
+    """Propose new content for a file without modifying it.
+
+    Returns the change id and a unified diff the UI can render in a diff
+    editor before the user decides to apply or discard the change.
+    """
+    try:
+        file_path = (request.get("filePath") or "").strip()
+        proposed_content = request.get("proposedContent")
+        if not file_path:
+            raise HTTPException(status_code=422, detail="filePath must not be empty")
+        if proposed_content is None or not isinstance(proposed_content, str):
+            raise HTTPException(status_code=422, detail="proposedContent must be a string")
+
+        store = _pending_store(request.get("projectRoot"))
+        target = store.project_file(file_path)
+        if not target.exists() or not target.is_file():
+            raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
+
+        original_content = target.read_text(encoding="utf-8")
+        diff = "".join(
+            difflib.unified_diff(
+                original_content.splitlines(keepends=True),
+                proposed_content.splitlines(keepends=True),
+                fromfile=f"a/{file_path}",
+                tofile=f"b/{file_path}",
+            )
+        )
+        record = store.save(
+            file_path=file_path,
+            original_content=original_content,
+            proposed_content=proposed_content,
+            diff=diff,
+        )
+        return record
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Propose file change failed: {e}")
+        raise HTTPException(status_code=500, detail={"errorCode": "PROPOSE_FAILED", "message": str(e)})
+
+
+@router.get("/files/changes")
+async def list_file_changes(projectRoot: Optional[str] = None):
+    """List pending file-change proposals (metadata only, no contents)."""
+    try:
+        store = _pending_store(projectRoot)
+        return {"changes": store.list()}
+    except Exception as e:
+        logger.error(f"List file changes failed: {e}")
+        raise HTTPException(status_code=500, detail={"errorCode": "LIST_CHANGES_FAILED", "message": str(e)})
+
+
+@router.get("/files/changes/{change_id}")
+async def get_file_change(change_id: str, projectRoot: Optional[str] = None, includeContents: bool = True):
+    """Return one change proposal, optionally including original/proposed contents."""
+    try:
+        store = _pending_store(projectRoot)
+        record = store.get(change_id)
+        if not record:
+            raise HTTPException(status_code=404, detail=f"Change not found: {change_id}")
+        if not includeContents:
+            return {
+                k: v for k, v in record.items()
+                if k not in ("originalContent", "proposedContent")
+            }
+        return record
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Get file change failed: {e}")
+        raise HTTPException(status_code=500, detail={"errorCode": "GET_CHANGE_FAILED", "message": str(e)})
+
+
+@router.post("/files/changes/{change_id}/apply")
+async def apply_file_change(change_id: str, request: Dict[str, Any]):
+    """Apply an approved change, keeping a backup of the original for rollback."""
+    try:
+        store = _pending_store(request.get("projectRoot"))
+        record = store.get(change_id)
+        if not record:
+            raise HTTPException(status_code=404, detail=f"Change not found: {change_id}")
+        if record.get("status") != "pending":
+            raise HTTPException(
+                status_code=409,
+                detail=f"Change {change_id} is not pending (status: {record.get('status')})",
+            )
+
+        target = store.project_file(record["filePath"])
+        if not target.exists():
+            raise HTTPException(status_code=404, detail=f"File not found: {record['filePath']}")
+
+        backup_dir = store.project_root / ".llm_training_agent_backups"
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        backup_path = backup_dir / f"{target.name}.{change_id}.bak"
+        backup_path.write_text(target.read_text(encoding="utf-8"), encoding="utf-8")
+
+        target.write_text(record["proposedContent"], encoding="utf-8")
+        store.set_status(change_id, "applied", backup_path=str(backup_path))
+        return {
+            "changeId": change_id,
+            "filePath": record["filePath"],
+            "status": "applied",
+            "backupPath": str(backup_path),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Apply file change failed: {e}")
+        raise HTTPException(status_code=500, detail={"errorCode": "APPLY_FAILED", "message": str(e)})
+
+
+@router.post("/files/changes/{change_id}/discard")
+async def discard_file_change(change_id: str, request: Dict[str, Any]):
+    """Reject a pending change without touching the file."""
+    try:
+        store = _pending_store(request.get("projectRoot"))
+        record = store.get(change_id)
+        if not record:
+            raise HTTPException(status_code=404, detail=f"Change not found: {change_id}")
+        if record.get("status") == "applied":
+            raise HTTPException(
+                status_code=409,
+                detail="Change already applied. Use rollback instead of discard.",
+            )
+        store.set_status(change_id, "rejected")
+        store.remove(change_id)
+        return {"changeId": change_id, "status": "rejected"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Discard file change failed: {e}")
+        raise HTTPException(status_code=500, detail={"errorCode": "DISCARD_FAILED", "message": str(e)})
+
+
+@router.post("/files/changes/{change_id}/rollback")
+async def rollback_file_change(change_id: str, request: Dict[str, Any]):
+    """Restore a file to its pre-apply state from the stored backup."""
+    try:
+        store = _pending_store(request.get("projectRoot"))
+        record = store.get(change_id)
+        if not record:
+            raise HTTPException(status_code=404, detail=f"Change not found: {change_id}")
+        backup_str = record.get("backupPath")
+        if record.get("status") != "applied" or not backup_str:
+            raise HTTPException(status_code=409, detail="Change has not been applied; nothing to roll back")
+
+        backup_path = Path(backup_str)
+        if not backup_path.exists():
+            raise HTTPException(status_code=404, detail=f"Backup not found: {backup_path}")
+
+        target = store.project_file(record["filePath"])
+        target.write_text(backup_path.read_text(encoding="utf-8"), encoding="utf-8")
+        store.set_status(change_id, "rolled_back")
+        store.remove(change_id)
+        return {"changeId": change_id, "filePath": record["filePath"], "status": "rolled_back"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Rollback file change failed: {e}")
+        raise HTTPException(status_code=500, detail={"errorCode": "ROLLBACK_FAILED", "message": str(e)})
