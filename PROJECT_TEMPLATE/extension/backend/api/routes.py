@@ -381,6 +381,7 @@ async def analyze_project(request: Dict[str, Any]):
         cost_estimator = CostEstimator()
 
         # Dataset analysis
+        dataset_result_obj = None
         try:
             dataset_result_obj = await dataset_analyzer.analyze(context)
             results["dataset"] = dataset_result_obj.model_dump()
@@ -397,6 +398,7 @@ async def analyze_project(request: Dict[str, Any]):
             results["prompt"] = {"error": str(e), "clarity_score": 0.5, "confidence": "low"}
 
         # Hyperparameter analysis
+        hp_result_obj = None
         try:
             hp_result_obj = await hp_analyzer.analyze(context)
             results["hyperparameters"] = hp_result_obj.model_dump()
@@ -412,9 +414,12 @@ async def analyze_project(request: Dict[str, Any]):
             logger.error(f"ModelAdvisor failed: {e}")
             results["model"] = {"error": str(e), "confidence": "low"}
 
-        # Cost estimation
+        # Cost estimation (receives the real dataset & hyperparameter results so
+        # the estimates are derived from measured values, not placeholders)
         try:
-            cost_result_obj = await cost_estimator.analyze(context)
+            cost_result_obj = await cost_estimator.analyze(
+                context, dataset_result=dataset_result_obj, hp_result=hp_result_obj,
+            )
             results["cost"] = cost_result_obj.model_dump()
         except Exception as e:
             logger.error(f"CostEstimator failed: {e}")

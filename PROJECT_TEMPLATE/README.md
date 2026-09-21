@@ -66,6 +66,28 @@ Backend generates predictions, recommendations, and a report
 Result is returned and shown in the Overview / Reports views
 ```
 
+### Real analysis, not placeholders
+
+The five core analyzers compute their results from the user's actual project files and
+configuration — never from hardcoded demo values:
+
+- **Dataset Analyzer** — reads *every* discovered dataset file (JSONL/JSON/CSV/TSV/TXT), computes
+  real statistics (samples, token estimate, duplicates, missing fields, consistency) with bounded
+  memory usage; empty/unreadable datasets are reported explicitly instead of faked.
+- **Prompt Analyzer** — analyzes the discovered prompt-template file (or pasted inline template
+  content) for structure, ambiguity, clarity and formatting.
+- **Hyperparameter Analyzer** — reads learning rate, batch size, epochs, LoRA settings, etc. from the
+  project's config files. Missing values are reported as missing (with provenance per value), never
+  silently replaced by defaults.
+- **Model Advisor** — resolves the base model detected in the config against a reference database of
+  known models, and cross-checks its VRAM estimate against the actually detected GPU.
+- **Cost Estimator** — uses the standard `FLOPs = 6 × P × tokens` formula with the measured dataset
+  size, the user's real batch/epoch/sequence settings and the detected GPU. Every assumption (QLoRA
+  method, 70% utilization, default sequence length …) is labeled in the result, and estimates that
+  cannot be computed are returned as `"unknown"` rather than invented numbers.
+
+See [`docs/8_core_analyzer_functionality.md`](docs/8_core_analyzer_functionality.md) for details.
+
 ## AI Settings
 
 The **Settings view** (Activity Bar → LLM Training Agent → Settings) lets you:
@@ -103,9 +125,8 @@ When the agent proposes a file modification, it is **never applied silently**. E
 Pending proposals persist on disk (`.llm_training_agent/pending_changes/`), so you can review them even after a restart. Backups live in `.llm_training_agent_backups/`.
 
 ## Troubleshooting
-> Free tiers change often — confirm current availability on the provider's official site.
 
-## Troubleshooting
+> Free tiers change often — confirm current availability on the provider's official site.
 
 - **Backend unavailable / connection refused** — the extension auto-starts the backend on `127.0.0.1:8000`. Check the Output panel → **LLM Training Agent: Backend**. Start it manually: `cd backend && python -m uvicorn main:app --host 127.0.0.1 --port 8000`.
 - **Python or dependencies missing** — install Python 3.10+ and run `pip install -r backend/requirements.txt`.
@@ -130,7 +151,7 @@ npm test
 npm run package   # produces llm-training-agent-1.0.0.vsix
 
 # Re-sync backend into the extension before packaging (if backend changed)
-cd ..
+# (run from the repository root)
 python build_backend_into_extension.py
 cd extension && npm run package
 ```

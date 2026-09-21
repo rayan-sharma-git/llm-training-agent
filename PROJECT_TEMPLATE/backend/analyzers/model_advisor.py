@@ -159,20 +159,31 @@ class ModelAdvisor:
             model_info = self._partial_lookup(model_name)
 
         if model_info is None:
-            # Unknown model — use defaults and flag
+            # Unknown model — report unknowns honestly instead of inventing
+            # "medium" capability ratings. The schema has no Optional for these
+            # fields, so "unknown"/0 are used as explicit unknown markers.
             model_info = {
                 "parameter_count": "unknown",
-                "context_length": 4096,
-                "estimated_vram": "unknown (model not in database)",
-                "reasoning_capability": "medium",
-                "coding_capability": "medium",
-                "multilingual_capability": "medium",
-                "instruction_following_capability": "medium",
-                "speed_score": "medium",
-                "memory_efficiency": "medium",
-                "strengths": ["Unknown model — specifications not in database"],
-                "weaknesses": ["Model not recognized; specs may be inaccurate"],
+                "context_length": 0,
+                "estimated_vram": "unknown (model not in the reference database)",
+                "reasoning_capability": "unknown",
+                "coding_capability": "unknown",
+                "multilingual_capability": "unknown",
+                "instruction_following_capability": "unknown",
+                "speed_score": "unknown",
+                "memory_efficiency": "unknown",
+                "strengths": ["Unknown model — specifications not in the reference database"],
+                "weaknesses": [
+                    "Model not recognized; specifications cannot be verified.",
+                    "Provide the model name (or a recognized alias) for a data-based assessment.",
+                ],
             }
+
+        # Add an honest note that the specs come from a static reference
+        # database, not from verified/measure hardware performance.
+        model_info.setdefault("weaknesses", []).append(
+            "Specifications are reference data from a static knowledge base — not measured on your hardware."
+        )
 
         # Step 2: Determine task and recommend alternatives
         task = self._infer_task(context)
@@ -180,17 +191,29 @@ class ModelAdvisor:
 
         confidence = "high" if model_info["parameter_count"] != "unknown" else "low"
 
-        # Step 3: Optional LLM enhancement
+        # Hardware-aware check: compare the model's (reference) VRAM estimate
+        # with the VRAM actually detected on this machine, when available.
+        detected_gpu = self._first_detected_gpu(context)
+        if detected_gpu and model_info["parameter_count"] != "unknown":
+            vram_gb = detected_gpu.get("vram_gb")
+            if vram_gb:
+                model_info["weaknesses"].append(
+                    f"Detected GPU '{detected_gpu.get('name')}' has {vram_gb:.0f}GB VRAM "
+                    f"(model reference: {model_info['estimated_vram']}). "
+                    "Verify feasibility for your intended precision/fine-tuning method."
+                )
+
+        # Step 3: Optional LLM enhancement — only accept well-formed output and
+        # never let it overwrite the reference-derived numeric specifications.
         if self._llm.is_available:
             llm_result = await self._llm_enhance(model_name, task, model_info)
             if llm_result:
-                confidence = "high"
-                if "strengths" in llm_result:
-                    model_info["strengths"] = llm_result["strengths"]
-                if "weaknesses" in llm_result:
-                    model_info["weaknesses"] = llm_result["weaknesses"]
-                if "recommendedAlternatives" in llm_result:
-                    alternatives = llm_result["recommendedAlternatives"]
+                if isinstance(llm_result.get("strengths"), list) and llm_result["strengths"]:
+                    model_info["strengths"] = [str(s) for s in llm_result["strengths"]]
+                if isinstance(llm_result.get("weaknesses"), list) and llm_result["weaknesses"]:
+                    model_info["weaknesses"] = [str(w) for w in llm_result["weaknesses"]]
+                if isinstance(llm_result.get("recommendedAlternatives"), list) and llm_result["recommendedAlternatives"]:
+                    alternatives = [str(a) for a in llm_result["recommendedAlternatives"]]
 
         return ModelAnalysisResult(
             selected_model=model_name,
@@ -208,6 +231,12 @@ class ModelAdvisor:
             recommended_alternatives=alternatives,
             confidence=confidence,
         )
+
+    def _first_detected_gpu(self, context: ProjectContext) -> Optional[Dict[str, Any]]:
+        """Return the first actually-detected GPU (if any) from the project context."""
+        hw = context.hardware_information or {}
+        gpus = hw.get("gpus") or []
+        return gpus[0] if gpus else None
 
     def _lookup_model(self, model_name: str) -> Optional[Dict[str, Any]]:
         """Look up a model by exact name."""

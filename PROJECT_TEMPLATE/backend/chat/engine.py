@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 
 from models.schemas import ProjectContext, EngineeringReport, Recommendation, ChatMessage
 from ai.providers import get_provider
-from core.config import get_settings
+from core.config import get_settings, get_active_provider
 from core.errors import AppError
 
 logger = logging.getLogger(__name__)
@@ -16,7 +16,9 @@ class ChatEngine:
     """Manages conversational interactions about the project."""
 
     def __init__(self, provider_name: Optional[str] = None):
-        self.provider_name = provider_name or get_settings().default_provider
+        # Explicit provider name (e.g. from the request) wins; otherwise use
+        # the runtime-selected provider, falling back to the configured default.
+        self.provider_name = provider_name or get_active_provider() or get_settings().default_provider
         self._provider = None
 
     @property

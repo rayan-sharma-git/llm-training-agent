@@ -112,17 +112,42 @@ class ReportGenerator:
         )
     
     def _compute_health_score(self, dataset_result: DatasetAnalysisResult, hp_result: HyperparameterAnalysisResult, model_result: ModelAnalysisResult) -> float:
-        """Compute overall project health score."""
+        """Compute overall project health score from the measured analysis results.
+
+        Every input is a real analyzer output. The model contribution is a
+        documented weight based on how much verified data exists about the
+        selected model (high confidence = reference database match), not a
+        quality guarantee.
+        """
         scores = [dataset_result.quality_score, hp_result.efficiency_score]
-        if model_result.confidence in ["high", "very_high"]:
-            scores.append(0.8)
+        # Model-confidence weight: high = recognized model (reference data),
+        # medium = partially verified, low/very_low = unknown model.
+        model_weight = {
+            "high": 0.8, "very_high": 0.9, "medium": 0.5, "low": 0.2, "very_low": 0.1,
+        }.get(model_result.confidence, 0.5)
+        scores.append(model_weight)
         return sum(scores) / len(scores)
-    
+
     def _compute_readiness_score(self, dataset_result: DatasetAnalysisResult, hp_result: HyperparameterAnalysisResult, model_result: ModelAnalysisResult) -> float:
-        """Compute training readiness score."""
-        if dataset_result.quality_score > 0.8 and hp_result.efficiency_score > 0.7:
-            return 0.85
-        return 0.6
+        """Compute training readiness from the measured results (0-1, continuous).
+
+        This is a documented heuristic weighting of the real analyzer outputs —
+        never a fixed constant.
+        """
+        has_data = dataset_result.sample_count > 0
+        # Data readiness: quality score, discounted when data is missing.
+        data_component = dataset_result.quality_score if has_data else 0.0
+        # Configuration readiness: efficiency score, discounted when the
+        # configuration was not found (confidence very_low).
+        config_component = (
+            hp_result.efficiency_score * 0.5
+            if hp_result.confidence in ("very_low", "low")
+            else hp_result.efficiency_score
+        )
+        # Model readiness: recognized model with known specs.
+        model_component = 1.0 if model_result.confidence == "high" else 0.5 if model_result.confidence == "medium" else 0.0
+
+        return round(0.5 * data_component + 0.3 * config_component + 0.2 * model_component, 3)
     
     def _generate_executive_summary(self, context: ProjectContext, dataset_result: DatasetAnalysisResult, hp_result: HyperparameterAnalysisResult, model_result: ModelAnalysisResult, recommendations: List[Recommendation]) -> str:
         """Generate executive summary."""

@@ -1,6 +1,7 @@
 """Project scanner for discovering fine-tuning project structure."""
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -132,19 +133,35 @@ class ProjectScanner:
         return sorted(set(files))
 
     def _detect_model(self) -> Optional[str]:
-        """Attempt to detect the base model."""
-        for config in self.project_path.rglob("*.yaml"):
+        """Attempt to detect the base model from training configs.
+
+        Returns the actual model name found in ``model_name_or_path`` (not a
+        placeholder string) so downstream analyzers can resolve it.
+        """
+        import re as _re
+
+        for config in self.project_path.rglob("*.y*ml"):
             if self._is_skipped(config):
                 continue
             try:
                 text = config.read_text(errors="ignore")
-                if "model_name_or_path" in text:
-                    return "detected_in_config"
             except (OSError, PermissionError):
                 continue
-            except Exception as e:
-                logger.debug(f"Failed to read config {config}: {e}")
+            m = _re.search(r"model_name_or_path\s*[:=]\s*[\"']?([\w./\\-]+)", text)
+            if m:
+                return m.group(1)
+        # Also check JSON configs (e.g. HF trainer configs)
+        for config in self.project_path.rglob("*.json"):
+            if self._is_skipped(config):
                 continue
+            try:
+                data = json.loads(config.read_text(errors="ignore"))
+            except Exception:
+                continue
+            if isinstance(data, dict):
+                value = data.get("model_name_or_path") or data.get("_name_or_path")
+                if isinstance(value, str) and value:
+                    return value
         return None
 
     def _detect_hardware(self) -> Dict[str, Any]:

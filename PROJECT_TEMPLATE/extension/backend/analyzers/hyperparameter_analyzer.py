@@ -32,6 +32,7 @@ class HyperparameterAnalyzer:
         gradient_accumulation = kwargs.get("gradient_accumulation")
 
         # Try to read from config files if values not provided inline
+        config_values: Dict[str, Any] = {}
         if not any([lr, batch_size, epochs]):
             config_values = self._read_config_files(context, config_path)
             lr = lr or config_values.get("learning_rate")
@@ -43,21 +44,55 @@ class HyperparameterAnalyzer:
             lora_dropout = lora_dropout or config_values.get("lora_dropout")
             gradient_accumulation = gradient_accumulation or config_values.get("gradient_accumulation")
 
-        # Apply defaults if still unknown
-        lr = lr or 2e-4
-        batch_size = batch_size or 8
-        epochs = epochs or 3
+        # IMPORTANT: do not fabricate values when the user's configuration does
+        # not define them. Missing values stay None and are reported explicitly
+        # in the findings/recommendations so the report never presents invented
+        # numbers as the user's configuration.
+        #
+        # Track the provenance of every value so downstream layers (and the
+        # user) can distinguish user/config-provided values from missing ones.
+        sources = {
+            "learning_rate": "user" if kwargs.get("learning_rate") else ("config" if lr else "missing"),
+            "batch_size": "user" if kwargs.get("batch_size") else ("config" if batch_size else "missing"),
+            "epochs": "user" if kwargs.get("epochs") else ("config" if epochs else "missing"),
+            "optimizer": "user" if kwargs.get("optimizer") else ("config" if optimizer else "missing"),
+        }
 
-        # Step 1: Deterministic risk assessment
+        # Step 1: Deterministic risk assessment (only over values that exist)
         overfitting_risk, underfitting_risk, efficiency_score, findings, recommendations = \
             self._assess_hyperparameters(lr, batch_size, epochs, optimizer,
                                          lora_rank, lora_alpha, lora_dropout,
                                          gradient_accumulation)
 
-        confidence = "high" if any([lr, batch_size, epochs]) else "medium"
+        known_core = [lr, batch_size, epochs]
+        if all(v is not None for v in known_core):
+            confidence = "high"
+        elif any(v is not None for v in known_core):
+            confidence = "medium"
+        else:
+            confidence = "very_low"
+            recommendations.append(
+                "No training configuration was found in this project "
+                "(learning rate, batch size and epochs are all unknown). "
+                "Add a training config (e.g. config.yaml) so they can be analyzed."
+            )
 
-        # Step 2: Optional LLM enhancement
-        if self._llm.is_available:
+        # Record provenance for the core values so estimates can never pass
+        # missing values off as user-provided.
+        display_names = {
+            "learning_rate": "learning rate",
+            "batch_size": "batch size",
+            "epochs": "epochs",
+            "optimizer": "optimizer",
+        }
+        for key, origin in sources.items():
+            if origin == "missing":
+                findings.append(f"{display_names[key]}: not found in the project configuration.")
+            else:
+                findings.append(f"{display_names[key]}: from {'request' if origin == 'user' else 'project configuration'}.")
+
+        # Step 2: Optional LLM enhancement (only when real values exist)
+        if self._llm.is_available and any(v is not None for v in known_core):
             llm_result = await self._llm_enhance(lr, batch_size, epochs, optimizer,
                                                   lora_rank, lora_alpha, lora_dropout)
             if llm_result:
@@ -83,6 +118,7 @@ class HyperparameterAnalyzer:
             overfitting_risk=overfitting_risk,
             underfitting_risk=underfitting_risk,
             efficiency_score=round(efficiency_score, 2),
+            findings=findings,
             recommendations=recommendations,
             confidence=confidence,
         )
@@ -274,57 +310,81 @@ class HyperparameterAnalyzer:
         self, lr, batch_size, epochs, optimizer,
         lora_rank, lora_alpha, lora_dropout, gradient_accumulation
     ) -> tuple[str, str, float, List[str], List[str]]:
-        """Assess hyperparameters using deterministic rules."""
+        """Assess *provided* hyperparameters using deterministic rules.
+
+        Only values that actually exist are assessed. Missing values are
+        skipped (never defaulted), and their absence is reported instead so
+        that recommendations never rest on invented numbers.
+        """
         recommendations: List[str] = []
         findings: List[str] = []
+        scores: List[float] = []
+        risk_levels: List[str] = []
 
-        # Learning rate risk
-        if lr > 1e-3:
-            recommendations.append("Learning rate is high (>1e-3). Consider reducing for stability.")
-            findings.append(f"Learning rate {lr} may cause training instability.")
-            lr_risk = "high"
-        elif lr > 5e-4:
-            recommendations.append("Learning rate is moderate. Monitor for stability.")
-            lr_risk = "medium"
-        else:
-            lr_risk = "low"
+        # Learning rate risk (heuristic guidance, not guaranteed optimal values)
+        if lr is not None:
+            if lr > 1e-3:
+                recommendations.append("Learning rate is high (>1e-3). Consider reducing for stability.")
+                findings.append(f"Learning rate {lr} may cause training instability.")
+                lr_risk = "high"
+            elif lr > 5e-4:
+                recommendations.append("Learning rate is moderate. Monitor for stability.")
+                lr_risk = "medium"
+            else:
+                lr_risk = "low"
+            risk_levels.append(lr_risk)
+            scores.append({"high": 0.3, "medium": 0.7, "low": 1.0}[lr_risk])
 
         # Batch size efficiency
-        if batch_size < 4:
-            recommendations.append("Batch size is small (<4). Consider increasing or using gradient accumulation.")
-            findings.append(f"Batch size {batch_size} is below optimal.")
-            batch_risk = "high"
-        elif batch_size < 8:
-            batch_risk = "medium"
-        else:
-            batch_risk = "low"
+        if batch_size is not None:
+            if batch_size < 4:
+                recommendations.append("Batch size is small (<4). Consider increasing or using gradient accumulation.")
+                findings.append(f"Batch size {batch_size} is below typical values for fine-tuning.")
+                batch_risk = "high"
+            elif batch_size < 8:
+                batch_risk = "medium"
+            else:
+                batch_risk = "low"
+            risk_levels.append(batch_risk)
+            scores.append({"high": 0.3, "medium": 0.7, "low": 1.0}[batch_risk])
 
         # Epochs overfitting
-        if epochs > 10:
-            recommendations.append("Too many epochs (>10) may cause overfitting.")
-            findings.append(f"Epochs {epochs} may lead to overfitting.")
-            epoch_risk = "high"
-        elif epochs > 5:
-            epoch_risk = "medium"
-        else:
-            epoch_risk = "low"
+        if epochs is not None:
+            if epochs > 10:
+                recommendations.append("Too many epochs (>10) may cause overfitting.")
+                findings.append(f"Epochs {epochs} may lead to overfitting.")
+                epoch_risk = "high"
+            elif epochs > 5:
+                epoch_risk = "medium"
+            else:
+                epoch_risk = "low"
+            risk_levels.append(epoch_risk)
+            scores.append({"high": 0.3, "medium": 0.7, "low": 1.0}[epoch_risk])
 
         # Gradient accumulation
         if gradient_accumulation and gradient_accumulation > 1:
             findings.append(f"Gradient accumulation steps: {gradient_accumulation}")
 
-        # Determine overall risk levels
+        if not scores:
+            # Nothing was provided — report a neutral-but-unverifiable state
+            # instead of pretending the configuration is fine.
+            findings.append("No hyperparameters were available to assess.")
+            return "unknown", "unknown", 0.5, findings, recommendations
+
+        # Determine overall risk levels from the values that were assessed
         risk_map = {"high": 0, "medium": 1, "low": 2}
-        risk_levels = [lr_risk, batch_risk, epoch_risk]
         overfitting_risk = max(risk_levels, key=lambda x: risk_map.get(x, 1))
-        underfitting_risk = "low" if batch_risk == "low" and epochs < 5 else "medium" if epochs < 10 else "high"
+        epochs_known = epochs is not None
+        if epochs_known and batch_size is not None:
+            underfitting_risk = (
+                "low" if batch_risk == "low" and epochs < 5
+                else "medium" if epochs < 10
+                else "high"
+            )
+        else:
+            underfitting_risk = "unknown"
 
-        # Efficiency score (0-1)
-        lr_score = {"high": 0.3, "medium": 0.7, "low": 1.0}[lr_risk]
-        batch_score = {"high": 0.3, "medium": 0.7, "low": 1.0}[batch_risk]
-        epoch_score = {"high": 0.3, "medium": 0.7, "low": 1.0}[epoch_risk]
-        efficiency_score = (lr_score + batch_score + epoch_score) / 3.0
-
+        efficiency_score = sum(scores) / len(scores)
         return overfitting_risk, underfitting_risk, efficiency_score, findings, recommendations
 
     async def _llm_enhance(self, lr, batch_size, epochs, optimizer, lora_rank, lora_alpha, lora_dropout) -> Optional[Dict[str, Any]]:

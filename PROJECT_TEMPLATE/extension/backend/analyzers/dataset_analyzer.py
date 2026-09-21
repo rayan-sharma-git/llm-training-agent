@@ -4,7 +4,6 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
@@ -16,7 +15,19 @@ logger = logging.getLogger(__name__)
 
 
 class DatasetAnalyzer:
-    """Analyzes dataset quality by reading actual dataset files."""
+    """Analyzes dataset quality by reading actual dataset files.
+
+    Supports multiple dataset files per project: statistics are aggregated
+    across every discovered dataset file. Per-file reading is capped to keep
+    memory usage bounded for large datasets (with an explicit truncation
+    warning in the findings). All metrics are computed deterministically.
+    """
+
+    # Analysis is read-only and bounded: never read more records than this
+    # per file, and never aggregate more than this in total.
+    MAX_RECORDS_PER_FILE = 50_000
+    MAX_TOTAL_RECORDS = 100_000
+    MAX_FILES = 20
 
     def __init__(self):
         self._llm = LLMHelper()
@@ -26,25 +37,73 @@ class DatasetAnalyzer:
         context: ProjectContext,
         dataset_path: Optional[str] = None,
     ) -> DatasetAnalysisResult:
-        """Analyze a dataset file for quality, duplicates, and consistency."""
-        dataset_path = dataset_path or (context.dataset_paths[0] if context.dataset_paths else None)
+        """Analyze the project's dataset files for quality, duplicates, and consistency."""
+        # Resolve the dataset file(s) to analyze.
+        if dataset_path:
+            dataset_files: List[Path] = [Path(dataset_path) if Path(dataset_path).is_absolute() else Path(context.project_path) / dataset_path]
+        else:
+            entries = context.dataset_paths or []
+            if not entries:
+                raise ValueError("No dataset path provided")
+            dataset_files = []
+            for entry in entries:
+                p = Path(entry) if Path(entry).is_absolute() else Path(context.project_path) / entry
+                if p.is_dir():
+                    # Expand directories deterministically (same rules as the cleaning pipeline)
+                    found = sorted(
+                        child for child in p.rglob("*")
+                        if child.is_file() and child.suffix.lower() in (".jsonl", ".json", ".csv", ".tsv", ".txt")
+                    )
+                    dataset_files.extend(found)
+                else:
+                    dataset_files.append(p)
 
-        if not dataset_path:
-            raise ValueError("No dataset path provided")
+        existing_files = [f for f in dataset_files if f.exists()]
+        missing_files = [str(f) for f in dataset_files if not f.exists()]
+        if not existing_files:
+            raise FileNotFoundError(f"Dataset file(s) not found: {missing_files or [str(p) for p in dataset_files]}")
 
-        full_path = Path(context.project_path) / dataset_path if not Path(dataset_path).is_absolute() else Path(dataset_path)
-        if not full_path.exists():
-            raise FileNotFoundError(f"Dataset file not found: {dataset_path}")
+        skipped_oversized: List[str] = []
+        if len(existing_files) > self.MAX_FILES:
+            skipped_oversized = [str(f) for f in existing_files[self.MAX_FILES:]]
+            existing_files = existing_files[: self.MAX_FILES]
 
-        logger.info(f"Analyzing dataset: {full_path}")
+        logger.info(f"Analyzing {len(existing_files)} dataset file(s): {[f.name for f in existing_files]}")
 
-        # Step 1: Read and parse the dataset
-        records, parse_errors = self._read_dataset(full_path)
+        # Step 1: Read and parse every dataset file (bounded, deterministic).
+        records: List[Dict[str, Any]] = []
+        parse_errors: List[str] = []
+        empty_files: List[str] = []
+        truncated_files: List[str] = []
+
+        for path in existing_files:
+            file_records, file_errors = self._read_dataset(path)
+            parse_errors.extend(f"{path.name}: {err}" for err in file_errors)
+            if not file_records:
+                empty_files.append(path.name)
+                continue
+            if len(file_records) > self.MAX_RECORDS_PER_FILE:
+                file_records = file_records[: self.MAX_RECORDS_PER_FILE]
+                truncated_files.append(path.name)
+            remaining = self.MAX_TOTAL_RECORDS - len(records)
+            if remaining <= 0:
+                break
+            if len(file_records) > remaining:
+                truncated_files.append(path.name)
+                file_records = file_records[:remaining]
+            records.extend(file_records)
 
         sample_count = len(records)
         if sample_count == 0:
+            # Nothing could be read — report this explicitly. No statistics
+            # are invented: every score is 0 and the confidence is minimal.
+            findings = ["No readable records were found in any dataset file."]
+            if empty_files:
+                findings.append(f"Empty or unparseable file(s): {', '.join(empty_files)}")
+            for err in parse_errors[:5]:
+                findings.append(f"  - {err}")
             return DatasetAnalysisResult(
-                dataset_name=full_path.name,
+                dataset_name=", ".join(f.name for f in existing_files),
                 sample_count=0,
                 token_count=0,
                 average_prompt_length=0.0,
@@ -57,10 +116,10 @@ class DatasetAnalyzer:
                 instruction_consistency_score=0.0,
                 response_consistency_score=0.0,
                 quality_score=0.0,
-                findings=["Dataset is empty or could not be parsed"],
-                warnings=["No training samples found"],
-                recommendations=["Provide a valid dataset file"],
-                confidence="high",
+                findings=findings,
+                warnings=["Dataset is empty or could not be parsed — quality metrics are unavailable"],
+                recommendations=["Provide a valid dataset file (JSONL, JSON, CSV, TSV or TXT)"],
+                confidence="very_low",
             )
 
         # Step 2: Compute deterministic statistics
@@ -113,9 +172,26 @@ class DatasetAnalyzer:
         # Step 8: Optionally call LLM for quality assessment
         confidence = "high" if sample_count > 100 else "medium" if sample_count > 10 else "low"
 
-        # If LLM is available, enhance the analysis
+        dataset_name = (
+            existing_files[0].name
+            if len(existing_files) == 1
+            else f"{len(existing_files)} files ({', '.join(f.name for f in existing_files[:3])}{'...' if len(existing_files) > 3 else ''})"
+        )
+        if truncated_files:
+            warnings_extra = [f"Analysis capped at {self.MAX_RECORDS_PER_FILE} records per file / {self.MAX_TOTAL_RECORDS} total — truncated: {', '.join(sorted(set(truncated_files)))}"]
+        else:
+            warnings_extra = []
+        if missing_files:
+            warnings_extra.append(f"Dataset path(s) not found and skipped: {', '.join(missing_files)}")
+        if empty_files and sample_count > 0:
+            warnings_extra.append(f"File(s) with no readable records: {', '.join(empty_files)}")
+        if skipped_oversized:
+            warnings_extra.append(f"File limit ({self.MAX_FILES}) reached — skipped: {', '.join(Path(p).name for p in skipped_oversized)}")
+
+        # If LLM is available, enhance the analysis (a deterministic sample, not
+        # the whole dataset, is sent to the LLM).
         if self._llm.is_available:
-            llm_result = await self._llm_enhance(full_path, records[:5], {
+            llm_result = await self._llm_enhance(existing_files[0], records[:5], {
                 "sample_count": sample_count,
                 "duplicate_percentage": duplicate_percentage,
                 "quality_score": quality_score,
@@ -128,8 +204,10 @@ class DatasetAnalyzer:
                 findings.extend(llm_result.get("findings", []))
                 warnings.extend(llm_result.get("warnings", []))
 
+        warnings.extend(warnings_extra)
+
         return DatasetAnalysisResult(
-            dataset_name=full_path.name,
+            dataset_name=dataset_name,
             sample_count=sample_count,
             token_count=token_count,
             average_prompt_length=avg_prompt,
@@ -274,10 +352,13 @@ class DatasetAnalyzer:
         # Average of consistency scores
         consistency = (fmt_score + lang_score + inst_score + resp_score) / 4.0
 
-        # Small datasets get lower confidence
+        # Small datasets get proportionally less confidence in the score, but
+        # the score is dampened rather than zeroed so that a small but clean
+        # dataset is never reported as "quality 0.0".
         size_factor = min(1.0, sample_count / 1000.0) if sample_count < 1000 else 1.0
+        size_dampening = 0.7 + 0.3 * size_factor  # 0.70..1.00 multiplier
 
-        score = consistency * size_factor - dup_penalty - near_dup_penalty - missing_penalty
+        score = (consistency * size_dampening) - dup_penalty - near_dup_penalty - missing_penalty
         return max(0.0, min(1.0, score))
 
     def _generate_findings(

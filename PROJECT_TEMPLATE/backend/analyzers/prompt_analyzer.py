@@ -46,39 +46,36 @@ class PromptAnalyzer:
                 template_name="none",
                 prompt_complexity="simple",
                 ambiguity_score=0.0,
-                clarity_score=0.5,
-                formatting_score=0.5,
-                instruction_quality_score=0.5,
-                consistency_score=0.5,
+                clarity_score=0.0,
+                formatting_score=0.0,
+                instruction_quality_score=0.0,
+                consistency_score=0.0,
                 detected_issues=["No prompt templates found in project"],
                 recommendations=["Add a prompt template file (e.g., prompt.txt)"],
-                confidence="low",
+                confidence="very_low",
             )
 
-        # Analyze the first template (primary)
-        template_path = templates[0]
-        full_path = (
-            Path(context.project_path) / template_path
-            if not Path(template_path).is_absolute()
-            else Path(template_path)
-        )
+        # Resolve the first entry: it may be a file path OR the template
+        # content itself (the /prompt/analyze endpoint accepts inline text).
+        resolved = self._resolve_template(context, templates[0])
+        template_name = str(resolved["name"] or "unknown")
 
-        if not full_path.exists():
+        if resolved["content"] is None:
             return PromptAnalysisResult(
-                template_name=template_path,
+                template_name=template_name,
                 prompt_complexity="simple",
                 ambiguity_score=0.3,
-                clarity_score=0.5,
-                formatting_score=0.5,
-                instruction_quality_score=0.5,
-                consistency_score=0.5,
-                detected_issues=[f"Template file not found: {template_path}"],
-                recommendations=["Ensure the prompt template path is correct"],
-                confidence="low",
+                clarity_score=0.0,
+                formatting_score=0.0,
+                instruction_quality_score=0.0,
+                consistency_score=0.0,
+                detected_issues=[f"Template file not found: {template_name}"],
+                recommendations=["Ensure the prompt template path is correct, or paste the template content"],
+                confidence="very_low",
             )
 
-        logger.info(f"Analyzing prompt template: {full_path}")
-        content = full_path.read_text(encoding="utf-8")
+        content = resolved["content"]
+        logger.info(f"Analyzing prompt template: {template_name}")
 
         # Step 1: Deterministic analysis
         detected_issues: List[str] = []
@@ -146,7 +143,7 @@ class PromptAnalyzer:
                     clarity_score = float(llm_result["clarityScore"])
 
         return PromptAnalysisResult(
-            template_name=template_path,
+            template_name=template_name,
             prompt_complexity=complexity,
             ambiguity_score=round(ambiguity_score, 2),
             clarity_score=round(clarity_score, 2),
@@ -174,6 +171,38 @@ class PromptAnalyzer:
             if count <= 1 and ph not in ("instruction", "input", "output", "response", "context"):
                 undefined.append(ph)
         return list(set(undefined))
+
+    def _resolve_template(self, context: ProjectContext, entry: str) -> Dict[str, Optional[str]]:
+        """Resolve a prompt-template entry to ``(name, content)``.
+
+        The entry may be either a file path or the raw template content (the
+        ``/prompt/analyze`` endpoint accepts inline template text). A non-empty
+        string that is not an existing path and contains a newline (or is long
+        enough not to be a plausible path) is treated as inline content.
+        ``name`` is always a string; ``content`` is None when the template
+        could not be resolved.
+        """
+        entry = (entry or "").strip()
+        if not entry:
+            return {"name": "empty", "content": None}
+
+        candidates = [Path(entry)]
+        if context.project_path and not Path(entry).is_absolute():
+            candidates.append(Path(context.project_path) / entry)
+
+        for candidate in candidates:
+            if candidate.is_file():
+                try:
+                    return {"name": candidate.name, "content": candidate.read_text(encoding="utf-8")}
+                except OSError as e:
+                    logger.warning(f"Failed to read template {candidate}: {e}")
+                    return {"name": candidate.name, "content": None}
+
+        looks_like_path = ("\n" not in entry) and len(entry) < 260 and " " not in entry
+        if looks_like_path:
+            return {"name": entry, "content": None}
+        # Inline template content
+        return {"name": "inline template", "content": entry}
 
     def _compute_ambiguity(self, content: str) -> float:
         """Score ambiguity (0=low ambiguity, 1=high ambiguity)."""

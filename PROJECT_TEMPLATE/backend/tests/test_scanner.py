@@ -117,7 +117,9 @@ def test_scanner_detects_model_from_yaml(tmp_path):
     (tmp_path / "config.yaml").write_text("model_name_or_path: meta-llama/llama-3\n")
     scanner = ProjectScanner(str(tmp_path))
     result = scanner.scan()
-    assert result["base_model"] == "detected_in_config"
+    # The scanner must return the actual model name (not a placeholder string)
+    # so downstream analyzers can resolve real specifications.
+    assert result["base_model"] == "meta-llama/llama-3"
 
 
 def test_scanner_detects_model_not_in_yaml(tmp_path):

@@ -133,6 +133,7 @@ class HyperparameterAnalysisResult(BaseModel):
     overfitting_risk: str = "medium"
     underfitting_risk: str = "medium"
     efficiency_score: float
+    findings: List[str] = []
     recommendations: List[str] = []
     confidence: str = "medium"
 
