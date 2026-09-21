@@ -58,7 +58,22 @@ router = APIRouter()
 
 # ---------------------------------------------------------------------------
 # Helpers for safe typed-result reconstruction
+#
+# The conversion helpers live in ``api/result_mapping.py`` so that the WebSocket
+# pipeline uses exactly the same fallbacks (no duplicated/diverging logic).
 # ---------------------------------------------------------------------------
+
+from api.result_mapping import (  # noqa: E402
+    safe_model as _safe_model,
+    default_dataset_result as _default_dataset_result,
+    default_prompt_result as _default_prompt_result,
+    default_hp_result as _default_hp_result,
+    default_model_result as _default_model_result,
+    default_cost_result as _default_cost_result,
+    default_prediction_result as _default_prediction_result,
+    coerce_gpu_estimate as _coerce_gpu_estimate,
+)
+
 
 def _as_bool(value: Any, default: bool = False) -> bool:
     """Coerce a JSON/string flag into a bool (used for optional request flags)."""
@@ -69,58 +84,6 @@ def _as_bool(value: Any, default: bool = False) -> bool:
     if isinstance(value, (int, float)):
         return bool(value)
     return str(value).strip().lower() in ("1", "true", "yes", "on", "enabled")
-
-
-def _safe_model(data: Dict[str, Any], model_cls: type, **defaults) -> Any:
-    """Safely construct a Pydantic model from a results dict.
-
-    If *data* is the result of a successful analyzer, its keys will match the
-    model fields and construction succeeds.  If *data* is a fallback error
-    dict (missing required fields or containing extra ``error`` key), we
-    fall back to *defaults*.
-    """
-    try:
-        return model_cls(**{k: v for k, v in data.items() if k in model_cls.model_fields})
-    except Exception:
-        return model_cls(**defaults)
-
-
-def _default_dataset_result() -> DatasetAnalysisResult:
-    return DatasetAnalysisResult(
-        dataset_name="unknown", sample_count=0, token_count=0,
-        average_prompt_length=0, average_response_length=0,
-        duplicate_percentage=0, near_duplicate_percentage=0,
-        missing_field_percentage=0, formatting_consistency_score=0,
-        language_consistency_score=0, instruction_consistency_score=0,
-        response_consistency_score=0, quality_score=0, confidence="low",
-    )
-
-
-def _default_prompt_result() -> PromptAnalysisResult:
-    return PromptAnalysisResult(
-        template_name="unknown", ambiguity_score=0.5, clarity_score=0.5,
-        formatting_score=0.5, instruction_quality_score=0.5,
-        consistency_score=0.5, confidence="low",
-    )
-
-
-def _default_hp_result() -> HyperparameterAnalysisResult:
-    return HyperparameterAnalysisResult(efficiency_score=0.5, confidence="low")
-
-
-def _default_model_result() -> ModelAnalysisResult:
-    return ModelAnalysisResult(
-        selected_model="unknown", parameter_count="unknown",
-        context_length=0, estimated_vram="unknown", confidence="low",
-    )
-
-
-def _default_cost_result() -> CostEstimate:
-    return CostEstimate(
-        estimated_training_time="unknown", estimated_gpu_hours=0.0,
-        estimated_vram_usage="unknown", estimated_checkpoint_size="unknown",
-        estimated_storage_requirement="unknown", confidence="low",
-    )
 
 
 # ---------------------------------------------------------------------------

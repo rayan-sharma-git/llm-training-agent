@@ -1,9 +1,161 @@
-"""Training outcome prediction engine."""
+"""Training outcome prediction engine.
+
+The engine answers one question honestly:
+
+    "Given the actual project, dataset, model, hardware and training
+     configuration, what can we reasonably estimate, what assumptions are we
+     making, what risks are indicated, and what cannot be predicted reliably?"
+
+Every value it returns is labelled with its provenance:
+
+  * ``measured``   - read from the user's real project files (dataset
+                     statistics, the user's training config, detected GPUs)
+  * ``calculated`` - derived from measured values with a documented formula
+                     (total tokens, training steps)
+  * ``heuristic``  - an engineering rule of thumb applied to measured values
+                     (risk indicators, expected direction of behaviour)
+  * ``assumed``    - a value that had to be assumed to produce an estimate
+                     (compute utilisation, unknown GPU throughput)
+  * ``unknown``    - required information that was not available
+
+The engine deliberately does NOT produce a guaranteed accuracy, benchmark
+score or expected quality improvement: this project holds no empirical
+evaluation data, so no such number could be defended. ``status``,
+``confidence_basis``, ``uncertainty`` and ``unknowns`` make the limits of the
+estimate explicit instead of hiding them behind a percentage.
+
+Resource estimates are NOT recalculated here. The engine reuses the existing
+``hardware.gpu_time_estimator.GPUTimeEstimator`` (the single authoritative
+implementation of the FLOPs/throughput math) and only feeds it the real
+analyzer outputs.
+"""
 from __future__ import annotations
 
 import logging
-from typing import List
-from models.schemas import ProjectContext, DatasetAnalysisResult, HyperparameterAnalysisResult, ModelAnalysisResult, PredictionResult
+from typing import Any, Dict, List, Optional, Tuple
+
+from models.schemas import (
+    CostEstimate,
+    DatasetAnalysisResult,
+    HyperparameterAnalysisResult,
+    ModelAnalysisResult,
+    PredictionEvidence,
+    PredictionResult,
+    PredictionRisk,
+    ProjectContext,
+    PromptAnalysisResult,
+)
+
+logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Engineering heuristics
+#
+# These thresholds are documented rules of thumb, chosen because they mark the
+# point where the expected *direction* of trouble changes — not because they are
+# scientifically established laws. Every risk below reports its own rationale,
+# so an engineer can disagree with a threshold and still use the analysis.
+# ---------------------------------------------------------------------------
+
+#: Below this sample count, fine-tuning tends to memorise rather than generalise.
+SMALL_DATASET_SAMPLES = 100
+#: Above this count the diversity signals (near-duplicate ratio) become meaningful.
+MODERATE_DATASET_SAMPLES = 1000
+#: Duplicate share at which optimisation spends capacity on repeats.
+HIGH_DUPLICATE_PCT = 10.0
+#: Duplicate share that already biases sampling away from unique content.
+MODERATE_DUPLICATE_PCT = 2.0
+#: Near-duplicate share at which output diversity is expected to collapse.
+HIGH_NEAR_DUPLICATE_PCT = 20.0
+#: Missing/empty field share at which the training signal becomes inconsistent.
+HIGH_MISSING_FIELD_PCT = 10.0
+#: Missing/empty field share that already weakens instruction following.
+MODERATE_MISSING_FIELD_PCT = 2.0
+#: Learning rates above this are conventionally unstable for common fine-tuning
+#: setups (typical: 1e-5..5e-5 full fine-tune, 1e-4..3e-4 LoRA/QLoRA).
+HIGH_LEARNING_RATE = 1e-3
+#: Learning rates below this are conventionally too small to move the loss in a
+#: few thousand steps (LoRA commonly uses 1e-4..3e-4, full fine-tune 1e-5+).
+LOW_LEARNING_RATE = 1e-6
+#: Project health score below which the dataset/configuration combination is
+#: treated as a quality risk.
+LOW_QUALITY_SCORE = 0.5
+#: Characters per token used when converting measured record lengths to tokens.
+#: A statistical average for English text — an assumption, never a measurement.
+CHARS_PER_TOKEN = 4.0
+
+#: Reporting order for risk severities (most important first).
+_SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
+#: Epoch counts beyond this over a tiny step budget are a classic overfitting
+#: pattern (the model sees the same samples many times).
+MANY_EPOCHS = 5
+#: Steps per epoch below this make repeating the data for many epochs wasteful.
+LOW_STEPS_PER_EPOCH = 200
+#: Sequence length past which memory pressure becomes the expected bottleneck.
+LONG_SEQUENCE_LENGTH = 4096
+#: Consistency score required before "good" behaviour is expected.
+GOOD_CONSISTENCY = 0.8
+#: Below this score, formatting/response consistency is expected to be poor.
+POOR_CONSISTENCY = 0.5
+
+
+def _finite(
+    value: Any,
+    minimum: Optional[float] = None,
+    maximum: Optional[float] = None,
+) -> Optional[float]:
+    """Return *value* as a usable float, or ``None`` when it is invalid.
+
+    Guards every failure mode that would otherwise produce a
+    believable-looking number: missing values, non-numeric strings, NaN,
+    infinities, and out-of-range values (zero/negative counts, absurd sizes).
+    """
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return None
+    if numeric != numeric or numeric in (float("inf"), float("-inf")):
+        return None
+    if minimum is not None and numeric < minimum:
+        return None
+    if maximum is not None and numeric > maximum:
+        return None
+    return numeric
+
+
+def _clean_pct(value: Any, maximum: float = 100.0) -> Optional[float]:
+    """Clamp a percentage into ``[0, maximum]``; ``None`` when unusable."""
+    return _finite(value, minimum=0.0, maximum=maximum)
+
+
+def _clean_score(value: Any) -> Optional[float]:
+    """Clamp a 0..1 score; ``None`` when unusable."""
+    return _finite(value, minimum=0.0, maximum=1.0)
+
+
+def _parse_param_count(parameter_count: Any) -> Optional[float]:
+    """Parse a parameter count such as ``"8B"`` or ``7.1`` into billions."""
+    if parameter_count is None:
+        return None
+    if isinstance(parameter_count, (int, float)) and not isinstance(parameter_count, bool):
+        return _finite(parameter_count, minimum=0.0, maximum=1e5)
+    text = str(parameter_count).strip().lower().replace(",", "")
+    if not text or text in ("unknown", "none", "n/a", "unrecognized"):
+        return None
+    multiplier = 1.0
+    if text.endswith("b"):
+        text = text[:-1]
+    elif text.endswith("m"):
+        text = text[:-1]
+        multiplier = 1e-3
+    try:
+        value = float(text) * multiplier
+    except ValueError:
+        return None
+    return _finite(value, minimum=0.0, maximum=1e5)
 
 
 class PredictionEngine:

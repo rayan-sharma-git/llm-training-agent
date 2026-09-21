@@ -156,18 +156,79 @@ class ModelAnalysisResult(BaseModel):
     confidence: str = "medium"
 
 
+class PredictionEvidence(BaseModel):
+    """A single input the prediction is based on, labelled by provenance.
+
+    ``category`` is one of:
+      * ``measured``  - read from the user's actual project files
+      * ``calculated``- derived from measured values by a documented formula
+      * ``heuristic`` - an engineering rule of thumb applied to measured values
+      * ``assumed``   - a value that had to be assumed to produce an estimate
+      * ``unknown``   - information that was required but not available
+    """
+    category: str
+    item: str
+    value: str
+    source: str = ""
+
+
+class PredictionRisk(BaseModel):
+    """A structured, explainable risk indicator.
+
+    Thresholds are engineering heuristics, not scientific laws; ``rationale``
+    records why the threshold exists and ``trigger`` records what was observed.
+    """
+    category: str
+    severity: str = "medium"          # critical | high | medium | low | info
+    trigger: str = ""
+    evidence: str = ""
+    rationale: str = ""
+    mitigation: str = ""
+
+
 class PredictionResult(BaseModel):
-    """Training outcome predictions."""
-    instruction_following_prediction: str = "fair"
-    hallucination_risk: str = "medium"
-    reasoning_prediction: str = "fair"
-    response_consistency_prediction: str = "fair"
-    creativity_prediction: str = "medium"
-    formatting_prediction: str = "fair"
+    """Training outcome predictions.
+
+    Fields describe engineering *estimates and indicators* derived from the
+    actual analyzer outputs. They are never guaranteed post-training results:
+    ``quality_note``/``evaluation_required`` make the limits explicit, and
+    ``evidence`` records what each conclusion rests on.
+
+    Unavailable information is reported with the literal value ``unknown``
+    rather than a fabricated default.
+    """
+    instruction_following_prediction: str = "unknown"
+    hallucination_risk: str = "unknown"
+    reasoning_prediction: str = "unknown"
+    response_consistency_prediction: str = "unknown"
+    creativity_prediction: str = "unknown"
+    formatting_prediction: str = "unknown"
     likely_failure_modes: List[str] = []
     expected_strengths: List[str] = []
     expected_weaknesses: List[str] = []
-    confidence: str = "medium"
+    confidence: str = "very_low"
+
+    # --- Status & provenance ------------------------------------------------
+    status: str = "unknown"  # ok | partial | insufficient_data | not_estimated
+    confidence_basis: str = ""
+    uncertainty: str = ""
+    unknowns: List[str] = []
+    assumptions: List[str] = []
+    evidence: List[PredictionEvidence] = []
+    risks: List[PredictionRisk] = []
+    quality_note: str = ""
+    evaluation_required: bool = True
+
+    # --- Training-time / resource estimates (numeric, comparable with runs) --
+    estimated_total_tokens: Optional[int] = None
+    estimated_training_steps: Optional[int] = None
+    estimated_training_seconds: Optional[float] = None
+    estimated_training_seconds_lower: Optional[float] = None
+    estimated_training_seconds_upper: Optional[float] = None
+    estimated_gpu_hours: Optional[float] = None
+    estimated_vram_gb: Optional[float] = None
+    estimated_throughput_samples_per_sec: Optional[float] = None
+    estimate_basis: str = ""
 
 
 class CostEstimate(BaseModel):
